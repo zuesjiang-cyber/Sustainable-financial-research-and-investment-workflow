@@ -1,0 +1,289 @@
+{
+  "case": {
+    "case_id": "sbg_fy2025",
+    "company": "圣邦微电子（北京）股份有限公司",
+    "ticker": "300661.SZ",
+    "base_period": "FY2024",
+    "current_period": "FY2025",
+    "currency": "CNY",
+    "accounting_scope": "CAS consolidated"
+  },
+  "facts": [
+    {
+      "metric": "revenue",
+      "period": "FY2024",
+      "value": "3346983120.66",
+      "unit": "CNY",
+      "evidence_id": "E25_P13_SUMMARY"
+    },
+    {
+      "metric": "cost",
+      "period": "FY2024",
+      "value": "1624468592.32",
+      "unit": "CNY",
+      "evidence_id": "E25_P85_COST_REVENUE"
+    },
+    {
+      "metric": "net_profit",
+      "period": "FY2024",
+      "value": "500247943.10",
+      "unit": "CNY",
+      "evidence_id": "E25_P13_SUMMARY"
+    },
+    {
+      "metric": "operating_cash_flow",
+      "period": "FY2024",
+      "value": "549337594.89",
+      "unit": "CNY",
+      "evidence_id": "E25_P13_SUMMARY"
+    },
+    {
+      "metric": "rd_expense",
+      "period": "FY2024",
+      "value": "870746770.34",
+      "unit": "CNY",
+      "evidence_id": "E25_P85_COST_REVENUE"
+    },
+    {
+      "metric": "revenue",
+      "period": "FY2025",
+      "value": "3898054583.68",
+      "unit": "CNY",
+      "evidence_id": "E25_P13_SUMMARY"
+    },
+    {
+      "metric": "cost",
+      "period": "FY2025",
+      "value": "1912334714.23",
+      "unit": "CNY",
+      "evidence_id": "E25_P85_COST_REVENUE"
+    },
+    {
+      "metric": "net_profit",
+      "period": "FY2025",
+      "value": "547059403.97",
+      "unit": "CNY",
+      "evidence_id": "E25_P13_SUMMARY"
+    },
+    {
+      "metric": "operating_cash_flow",
+      "period": "FY2025",
+      "value": "466319946.20",
+      "unit": "CNY",
+      "evidence_id": "E25_P89_CASH_FLOW"
+    },
+    {
+      "metric": "rd_expense",
+      "period": "FY2025",
+      "value": "1045194886.44",
+      "unit": "CNY",
+      "evidence_id": "E25_P85_COST_REVENUE"
+    }
+  ],
+  "narrative_pairs": [
+    {
+      "topic": "business_model",
+      "label": "业务模式与代工协同",
+      "base": {
+        "text": "公司长期深耕模拟集成电路芯片设计领域，采用行业成熟的 Fabless 经营模式，将芯片制造、封装和测试环节委托给具备专业资质的晶圆制造厂和封测厂商完成，公司集中核心资源于模拟芯片前沿研发与方案定义。",
+        "page": 17,
+        "evidence_id": "E24_P17_SUMMARY"
+      },
+      "current": {
+        "text": "公司结合模拟集成电路高度定制化与工艺深度绑定的产业特征，持续演进深化“Fabless+”业务模式。在晶圆制造环节，主要委托台积电（TSMC）、华润微等全球及国内知名代工厂紧密合作；同时公司自有专业测试中心稳定运行，实现了高端芯片工程验证、定制化测试与量产交付能力的自主掌控。",
+        "page": 16,
+        "evidence_id": "E25_P16_FABLESS"
+      }
+    },
+    {
+      "topic": "rd_investment",
+      "label": "研发投入与技术创新",
+      "base": {
+        "text": "2024年度公司研发费用为 8.71 亿元，研发费用率达 26.02%，研发人员占比超过 70%。公司在高性能信号链和低功耗电源管理领域累计可销售料号超过 5,200 款，持续加大工业和汽车电子等严苛环境应用布局。",
+        "page": 25,
+        "evidence_id": "E24_P25_RD"
+      },
+      "current": {
+        "text": "2025年度公司研发费用持续突破至 10.45 亿元，同比增长 20.03%，研发费用率提升至 26.81%。在售产品料号持续扩充至 6,000 款以上，覆盖信号链与电源管理全品类，高壁垒的车规级专用模拟芯片通过多项 AEC-Q100 认证并实现批量出货。",
+        "page": 85,
+        "evidence_id": "E25_P85_COST_REVENUE"
+      }
+    },
+    {
+      "topic": "supply_chain_capacity",
+      "label": "供应链韧性与产能交付",
+      "base": {
+        "text": "公司主要外协采购包括晶圆裸片及封测代工服务。为应对半导体行业周期波动，公司建立多元化供应商备份机制，与上游骨干晶圆制造厂保持年度产能协议约定，保障常规物料交付周期稳定。",
+        "page": 17,
+        "evidence_id": "E24_P17_SUMMARY"
+      },
+      "current": {
+        "text": "面对全球半导体产业链重构，公司积极推进本土化供应链深度合作，与主要晶圆制造商（包括台积电、华润微等）深化战略协同。随着江阴测试基地产能爬坡与自主定制工艺开发，供应链关键节点瓶颈显著缓解，高可靠性测试周期压缩约 15%。",
+        "page": 16,
+        "evidence_id": "E25_P16_FABLESS"
+      }
+    }
+  ],
+  "thesis_pillars": [
+    {
+      "id": "revenue_growth",
+      "title": "收入恢复增长与下游景气修复",
+      "original_view": "公司营业收入由前期库存去化低谷走向复苏，下游消费电子、工业控制及汽车电子需求逐步修复。",
+      "baseline_threshold": "收入同比增速不低于 15%",
+      "strengthen_threshold": "收入同比增速超过 20%",
+      "weaken_threshold": "收入同比增速低于 10%",
+      "monitor_next": "下游工控与汽车领域订单放量斜率，以及后续季度收入同比是否持续加速。"
+    },
+    {
+      "id": "profit_quality",
+      "title": "综合毛利率与产品组合升级",
+      "original_view": "高毛利高性能信号链芯片与车规级产品放量，有望支撑公司综合毛利率保持稳定或温和提升。",
+      "baseline_threshold": "综合毛利率保持稳定（变动在 ±0.50 个百分点以内）",
+      "strengthen_threshold": "综合毛利率同比提升超过 1.00 个百分点",
+      "weaken_threshold": "综合毛利率同比出现下降",
+      "monitor_next": "新产品导入价格曲线对综合毛利率的支撑力度，以及成熟制程晶圆代工价格变动。"
+    },
+    {
+      "id": "cash_flow_quality",
+      "title": "经营现金流与盈利匹配度",
+      "original_view": "伴随收入改善，经营活动现金流应当同步复苏，与归母净利润保持高度匹配（比率高于0.9倍）。",
+      "baseline_threshold": "经营现金流与归母净利润比率不低于 0.90 倍",
+      "strengthen_threshold": "经营活动现金流增速超过营业收入增速",
+      "weaken_threshold": "经营活动现金流量净额同比下滑，或现金利润比低于 0.90 倍",
+      "monitor_next": "营运资本占用恢复情况、经销商备货节奏及应收账款周转率变动。"
+    },
+    {
+      "id": "rd_intensity",
+      "title": "高强度研发驱动长期技术壁垒",
+      "original_view": "持续的高研发投入是模拟设计企业拓宽料号池与技术护城河的核心驱动，研发费用率应维持在 25%–28% 区间。",
+      "baseline_threshold": "研发费用率稳定在 25%–28% 战略区间",
+      "strengthen_threshold": "研发费用绝对值保持双位数增长且费用率维持在区间内",
+      "weaken_threshold": "研发费用率低于 23%，或研发费用绝对值同比下滑",
+      "monitor_next": "高端数模转换及车规隔离芯片等新料号转化落地节奏与研发人员产出效能。"
+    }
+  ],
+  "claims": [
+    {
+      "id": "C01",
+      "claim_text": "2025 年营业收入为 38.98 亿元",
+      "claim_type": "metric_value",
+      "metric_key": "revenue_fy2025",
+      "target_value": "38.98",
+      "unit": "亿元",
+      "evidence_id": "E25_P13_SUMMARY"
+    },
+    {
+      "id": "C02",
+      "claim_text": "2025 年营业收入同比增长 16.46%",
+      "claim_type": "metric_yoy",
+      "metric_key": "revenue_yoy",
+      "target_value": "16.46",
+      "unit": "%",
+      "evidence_id": "E25_P13_SUMMARY"
+    },
+    {
+      "id": "C03",
+      "claim_text": "2025 年归母净利润为 5.47 亿元",
+      "claim_type": "metric_value",
+      "metric_key": "net_profit_fy2025",
+      "target_value": "5.47",
+      "unit": "亿元",
+      "evidence_id": "E25_P13_SUMMARY"
+    },
+    {
+      "id": "C04",
+      "claim_text": "2025 年经营现金流同比增长 15.11%",
+      "claim_type": "metric_yoy",
+      "metric_key": "operating_cash_flow_yoy",
+      "target_value": "15.11",
+      "unit": "%",
+      "draft_error": "方向写反：实际为同比下降 15.11%（4.66亿元 vs 上年同期 5.49亿元）",
+      "evidence_id": "E25_P89_CASH_FLOW"
+    },
+    {
+      "id": "C05",
+      "claim_text": "2025 年综合毛利率为 52.00%",
+      "claim_type": "metric_value",
+      "metric_key": "gross_margin_fy2025",
+      "target_value": "52.00",
+      "unit": "%",
+      "draft_error": "数值有误：按 (38.98亿-19.12亿)/38.98亿 精确重算实际为 50.94%",
+      "evidence_id": "E25_P85_COST_REVENUE"
+    },
+    {
+      "id": "C06",
+      "claim_text": "2025 年研发费用率为 26.81%",
+      "claim_type": "metric_ratio",
+      "metric_key": "rd_expense_ratio_fy2025",
+      "target_value": "26.81",
+      "unit": "%",
+      "evidence_id": "E25_P85_COST_REVENUE"
+    },
+    {
+      "id": "C07",
+      "claim_text": "公司采用 Fabless+ 模式，主要晶圆制造商包括台积电",
+      "claim_type": "narrative_fact",
+      "topic": "business_model",
+      "keywords": ["Fabless+", "台积电"],
+      "evidence_id": "E25_P16_FABLESS"
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "E25_P13_SUMMARY",
+      "period": "FY2025",
+      "document": "圣邦股份2025年年度报告.pdf",
+      "page": 13,
+      "snippet": "主要会计数据和财务指标：营业收入 3,898,054,583.68 元，上年同期 3,346,983,120.66 元，本年比上年增长 16.46%；归属于上市公司股东的净利润 547,059,403.97 元，上年同期 500,247,943.10 元，本年比上年增长 9.36%；经营活动产生的现金流量净额 466,319,946.20 元，上年同期 549,337,594.89 元，本年比上年下降 15.11%。",
+      "image": "assets/fy2025_page_013.png"
+    },
+    {
+      "evidence_id": "E25_P16_FABLESS",
+      "period": "FY2025",
+      "document": "圣邦股份2025年年度报告.pdf",
+      "page": 16,
+      "snippet": "公司根据模拟集成电路技术特点，持续推进“Fabless+”模式。在晶圆制造环节，主要委托台积电（TSMC）、华润微等晶圆制造商进行；在封装测试环节主要委托国内外主流封测厂商，同时自有测试中心量产交付能力稳步提升。",
+      "image": "assets/fy2025_page_016.png"
+    },
+    {
+      "evidence_id": "E25_P85_COST_REVENUE",
+      "period": "FY2025",
+      "document": "圣邦股份2025年年度报告.pdf",
+      "page": 85,
+      "snippet": "营业收入本期发生额 3,898,054,583.68 元，上期发生额 3,346,983,120.66 元；营业成本本期发生额 1,912,334,714.23 元，上期发生额 1,624,468,592.32 元；研发费用本期发生额 1,045,194,886.44 元，上期发生额 870,746,770.34 元。",
+      "image": "assets/fy2025_page_085.png"
+    },
+    {
+      "evidence_id": "E25_P89_CASH_FLOW",
+      "period": "FY2025",
+      "document": "圣邦股份2025年年度报告.pdf",
+      "page": 89,
+      "snippet": "合并现金流量表：经营活动现金流入小计 4,098,284,811.23 元；经营活动现金流出小计 3,631,964,865.03 元；经营活动产生的现金流量净额本期发生额 466,319,946.20 元，上期发生额 549,337,594.89 元。",
+      "image": "assets/fy2025_page_089.png"
+    },
+    {
+      "evidence_id": "E25_P141_INVENTORY_MARGIN",
+      "period": "FY2025",
+      "document": "圣邦股份2025年年度报告.pdf",
+      "page": 141,
+      "snippet": "主营业务分行业及分产品情况：集成电路产品本期营业收入 3,898,054,583.68 元，营业成本 1,912,334,714.23 元，综合毛利率 50.94%，上年同期为 51.46%，比上年同期下降 0.52 个百分点。",
+      "image": "assets/fy2025_page_141.png"
+    },
+    {
+      "evidence_id": "E24_P17_SUMMARY",
+      "period": "FY2024",
+      "document": "圣邦股份2024年年度报告.pdf",
+      "page": 17,
+      "snippet": "公司从事模拟集成电路设计与销售，采用 Fabless 模式，晶圆代工与封测全部采用外部成熟厂商合作，公司专注核心产品架构研发。",
+      "image": "assets/fy2024_page_017.png"
+    },
+    {
+      "evidence_id": "E24_P25_RD",
+      "period": "FY2024",
+      "document": "圣邦股份2024年年度报告.pdf",
+      "page": 25,
+      "snippet": "2024年公司研发费用 870,746,770.34 元，占营业收入比例 26.02%，可销售料号超过 5200 款，持续强化研发人员梯队建设。",
+      "image": "assets/fy2024_page_025.png"
+    }
+  ]
+}

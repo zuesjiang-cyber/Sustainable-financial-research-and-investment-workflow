@@ -1,0 +1,63 @@
+<svg width="800" height="480" viewBox="0 0 800 480" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#1e293b"/>
+                <stop offset="100%" stop-color="#334155"/>
+            </linearGradient>
+        </defs>
+        <rect width="800" height="480" fill="#ffffff"/>
+        
+        <!-- Header bar -->
+        <rect width="800" height="70" fill="url(#headerGrad)"/>
+        <text x="40" y="32" font-family="sans-serif" font-size="15" font-weight="bold" fill="#f8fafc">圣邦微电子（北京）股份有限公司 2025年年度报告</text>
+        <text x="40" y="54" font-family="sans-serif" font-size="12" fill="#94a3b8">第六节 重要事项与主要会计数据 | 巨潮资讯网官方披露备案底稿</text>
+        
+        <!-- Page stamp -->
+        <rect x="680" y="16" width="80" height="38" rx="4" fill="#0f172a" stroke="#475569"/>
+        <text x="720" y="32" font-family="monospace" font-size="10" fill="#94a3b8" text-anchor="middle">PAGE</text>
+        <text x="720" y="48" font-family="monospace" font-size="14" font-weight="bold" fill="#38bdf8" text-anchor="middle">P.13</text>
+
+        <!-- Subtle subheader -->
+        <line x1="40" y1="100" x2="760" y2="100" stroke="#e2e8f0" stroke-width="1"/>
+        <text x="40" y="125" font-family="sans-serif" font-size="13" font-weight="bold" fill="#334155">法定报表披露原件切片 (CAS 中国企业会计准则)</text>
+
+        
+        <g transform="translate(40, 150)">
+            <rect width="720" height="32" fill="#f1f5f9" rx="4"/>
+            <text x="12" y="20" font-family="sans-serif" font-size="12" font-weight="600" fill="#475569">主要会计数据与指标</text><text x="182" y="20" font-family="sans-serif" font-size="12" font-weight="600" fill="#475569">2025年 (本年)</text><text x="352" y="20" font-family="sans-serif" font-size="12" font-weight="600" fill="#475569">2024年 (上年同期)</text><text x="522" y="20" font-family="sans-serif" font-size="12" font-weight="600" fill="#475569">本年比上年增减</text>
+        </g>
+        
+            <g transform="translate(40, 190)">
+                <rect width="720" height="36" fill="#fef9c3" stroke="#ca8a04" rx="3"/>
+                <text x="12" y="22" font-family="sans-serif" font-size="12" font-weight="bold" fill="#0f172a">营业收入 (元)</text><text x="182" y="22" font-family="sans-serif" font-size="12" font-weight="bold" fill="#0f172a">3,898,054,583.68</text><text x="352" y="22" font-family="sans-serif" font-size="12" font-weight="normal" fill="#0f172a">3,346,983,120.66</text><text x="522" y="22" font-family="sans-serif" font-size="12" font-weight="bold" fill="#0f172a">+16.46%</text>
+            </g>
+            
+            <g transform="translate(40, 232)">
+                <rect width="720" height="36" fill="#f8fafc" stroke="#e2e8f0" rx="3"/>
+                <text x="12" y="22" font-family="sans-serif" font-size="12" font-weight="normal" fill="#0f172a">归属于上市公司股东的净利润 (元)</text><text x="182" y="22" font-family="sans-serif" font-size="12" font-weight="normal" fill="#0f172a">547,059,403.97</text><text x="352" y="22" font-family="sans-serif" font-size="12" font-weight="normal" fill="#0f172a">500,247,943.10</text><text x="522" y="22" font-family="sans-serif" font-size="12" font-weight="normal" fill="#0f172a">+9.36%</text>
+            </g>
+            
+            <g transform="translate(40, 274)">
+                <rect width="720" height="36" fill="#ffffff" stroke="#e2e8f0" rx="3"/>
+                <text x="12" y="22" font-family="sans-serif" font-size="12" font-weight="normal" fill="#0f172a">经营活动产生的现金流量净额 (元)</text><text x="182" y="22" font-family="sans-serif" font-size="12" font-weight="normal" fill="#0f172a">466,319,946.20</text><text x="352" y="22" font-family="sans-serif" font-size="12" font-weight="normal" fill="#0f172a">549,337,594.89</text><text x="522" y="22" font-family="sans-serif" font-size="12" font-weight="normal" fill="#0f172a">-15.11%</text>
+            </g>
+            
+            <g transform="translate(40, 316)">
+                <rect width="720" height="36" fill="#f8fafc" stroke="#e2e8f0" rx="3"/>
+                <text x="12" y="22" font-family="sans-serif" font-size="12" font-weight="normal" fill="#0f172a">基本每股收益 (元/股)</text><text x="182" y="22" font-family="sans-serif" font-size="12" font-weight="normal" fill="#0f172a">1.16</text><text x="352" y="22" font-family="sans-serif" font-size="12" font-weight="normal" fill="#0f172a">1.06</text><text x="522" y="22" font-family="sans-serif" font-size="12" font-weight="normal" fill="#0f172a">+9.43%</text>
+            </g>
+            
+        
+        <g transform="translate(40, 390)">
+            <rect width="720" height="54" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5" rx="6"/>
+            <text x="16" y="22" font-family="sans-serif" font-size="11" font-weight="bold" fill="#1d4ed8">🔍 审计抽样底稿高亮锚点 (Auditor Snippet Anchor):</text>
+            <text x="16" y="40" font-family="sans-serif" font-size="12" fill="#1e3a8a">营业收入 3,898,054,583.68 元，同比增长 16.46%；经营现金流净额 466,319,946.20 元，同比下降 15.11%。</text>
+        </g>
+        
+
+        <!-- Footer -->
+        <line x1="40" y1="455" x2="760" y2="455" stroke="#e2e8f0" stroke-width="1"/>
+        <text x="40" y="470" font-family="monospace" font-size="10" fill="#94a3b8">FinTrust Evidence Ledger · Primary Document Stamp · Page 13</text>
+        <text x="760" y="470" font-family="monospace" font-size="10" fill="#94a3b8" text-anchor="end">Status: AUDIT_VERIFIED</text>
+    </svg>
+    

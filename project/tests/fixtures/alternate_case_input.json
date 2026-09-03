@@ -1,0 +1,158 @@
+{
+  "case": {
+    "case_id": "alternate_test_case",
+    "company": "测试半导体技术股份有限公司",
+    "ticker": "000001.SZ",
+    "base_period": "FY2024",
+    "current_period": "FY2025",
+    "currency": "CNY",
+    "accounting_scope": "CAS consolidated"
+  },
+  "facts": [
+    {
+      "metric": "revenue",
+      "period": "FY2024",
+      "value": "3000000000.00",
+      "unit": "CNY",
+      "evidence_id": "ALT_E24_REV"
+    },
+    {
+      "metric": "cost",
+      "period": "FY2024",
+      "value": "1500000000.00",
+      "unit": "CNY",
+      "evidence_id": "ALT_E24_COST"
+    },
+    {
+      "metric": "net_profit",
+      "period": "FY2024",
+      "value": "400000000.00",
+      "unit": "CNY",
+      "evidence_id": "ALT_E24_NP"
+    },
+    {
+      "metric": "operating_cash_flow",
+      "period": "FY2024",
+      "value": "400000000.00",
+      "unit": "CNY",
+      "evidence_id": "ALT_E24_CF"
+    },
+    {
+      "metric": "rd_expense",
+      "period": "FY2024",
+      "value": "780000000.00",
+      "unit": "CNY",
+      "evidence_id": "ALT_E24_RD"
+    },
+    {
+      "metric": "revenue",
+      "period": "FY2025",
+      "value": "3900000000.00",
+      "unit": "CNY",
+      "evidence_id": "ALT_E25_REV"
+    },
+    {
+      "metric": "cost",
+      "period": "FY2025",
+      "value": "1800000000.00",
+      "unit": "CNY",
+      "evidence_id": "ALT_E25_COST"
+    },
+    {
+      "metric": "net_profit",
+      "period": "FY2025",
+      "value": "600000000.00",
+      "unit": "CNY",
+      "evidence_id": "ALT_E25_NP"
+    },
+    {
+      "metric": "operating_cash_flow",
+      "period": "FY2025",
+      "value": "700000000.00",
+      "unit": "CNY",
+      "evidence_id": "ALT_E25_CF"
+    },
+    {
+      "metric": "rd_expense",
+      "period": "FY2025",
+      "value": "1050000000.00",
+      "unit": "CNY",
+      "evidence_id": "ALT_E25_RD"
+    }
+  ],
+  "narrative_pairs": [
+    {
+      "topic": "business_model",
+      "label": "业务模式",
+      "base": {
+        "text": "公司采用 Fabless 模式经营。",
+        "page": 10,
+        "evidence_id": "ALT_E24_BIZ"
+      },
+      "current": {
+        "text": "公司深化与台积电紧密合作，推进 Fabless+ 自建测试中心量产。",
+        "page": 12,
+        "evidence_id": "ALT_E25_BIZ"
+      }
+    }
+  ],
+  "thesis_pillars": [
+    {
+      "id": "revenue_growth",
+      "title": "收入增长",
+      "original_view": "收入恢复增长",
+      "baseline_threshold": "收入同比高于 15%",
+      "strengthen_threshold": "收入同比高于 20%",
+      "weaken_threshold": "收入同比低于 10%",
+      "monitor_next": "后续季度放量速度"
+    },
+    {
+      "id": "profit_quality",
+      "title": "盈利质量",
+      "original_view": "毛利率维持平稳",
+      "baseline_threshold": "毛利率基本保持稳定",
+      "strengthen_threshold": "毛利率提升超过 1 个百分点",
+      "weaken_threshold": "毛利率同比下降",
+      "monitor_next": "成本变动"
+    },
+    {
+      "id": "cash_flow_quality",
+      "title": "现金流质量",
+      "original_view": "现金流与利润匹配",
+      "baseline_threshold": "现金利润比不低于 0.9",
+      "strengthen_threshold": "经营现金流增速高于收入增速",
+      "weaken_threshold": "现金流下降或现金利润比低于 0.9",
+      "monitor_next": "回款周期"
+    },
+    {
+      "id": "rd_intensity",
+      "title": "研发投入",
+      "original_view": "研发费用率在 25%-28% 区间",
+      "baseline_threshold": "费用率在 25%-28%",
+      "strengthen_threshold": "费用双位数增长且在区间内",
+      "weaken_threshold": "费用率低于 23% 或绝对值下降",
+      "monitor_next": "新产品转换"
+    }
+  ],
+  "claims": [
+    {
+      "id": "C01",
+      "claim_text": "2025 年营业收入同比增长 30.00%",
+      "claim_type": "metric_yoy",
+      "metric_key": "revenue_yoy",
+      "target_value": "30.00",
+      "unit": "%",
+      "evidence_id": "ALT_E25_REV"
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "ALT_E25_REV",
+      "period": "FY2025",
+      "document": "测试年报.pdf",
+      "page": 1,
+      "snippet": "营业收入 39.00 亿元，增长 30.00%",
+      "image": "assets/test.png"
+    }
+  ]
+}

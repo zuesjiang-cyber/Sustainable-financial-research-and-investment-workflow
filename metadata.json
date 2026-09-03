@@ -1,0 +1,6 @@
+{
+  "name": "FinTrust Environment Probe & Audit",
+  "description": "Environment capability probe, execution log, and architectural audit for FinTrust Thesis Update MVP",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

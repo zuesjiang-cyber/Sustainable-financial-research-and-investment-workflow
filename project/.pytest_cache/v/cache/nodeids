@@ -1,0 +1,10 @@
+[
+  "tests/test_thesis_update_mvp.py::test_t01_input_loading_and_assets",
+  "tests/test_thesis_update_mvp.py::test_t02_financial_metrics_recalculation",
+  "tests/test_thesis_update_mvp.py::test_t03_narrative_analyzer_structured_output",
+  "tests/test_thesis_update_mvp.py::test_t04_four_thesis_pillars_evaluated_correctly",
+  "tests/test_thesis_update_mvp.py::test_t05_seven_claims_audit_5_verified_2_mismatch",
+  "tests/test_thesis_update_mvp.py::test_t06_published_summary_excludes_hallucinations",
+  "tests/test_thesis_update_mvp.py::test_t07_counterfactual_alternate_input_switches_thesis",
+  "tests/test_thesis_update_mvp.py::test_t08_export_serialization"
+]

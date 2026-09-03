@@ -1,0 +1,14 @@
+[
+  "project/tests/test_invariants_and_integrity.py::test_dynamic_claim_audit_detects_mismatches_without_hardcoded_ids",
+  "project/tests/test_invariants_and_integrity.py::test_fail_closed_narrative_analyzer_when_api_key_missing",
+  "project/tests/test_invariants_and_integrity.py::test_missing_required_facts_raises_exception",
+  "project/tests/test_invariants_and_integrity.py::test_zero_leakage_on_mutated_case",
+  "project/tests/test_thesis_update_mvp.py::test_t01_input_loading_and_assets",
+  "project/tests/test_thesis_update_mvp.py::test_t02_financial_metrics_recalculation",
+  "project/tests/test_thesis_update_mvp.py::test_t03_narrative_analyzer_structured_output",
+  "project/tests/test_thesis_update_mvp.py::test_t04_four_thesis_pillars_evaluated_correctly",
+  "project/tests/test_thesis_update_mvp.py::test_t05_seven_claims_audit_5_verified_2_mismatch",
+  "project/tests/test_thesis_update_mvp.py::test_t06_published_summary_excludes_hallucinations",
+  "project/tests/test_thesis_update_mvp.py::test_t07_counterfactual_alternate_input_switches_thesis",
+  "project/tests/test_thesis_update_mvp.py::test_t08_export_serialization"
+]
