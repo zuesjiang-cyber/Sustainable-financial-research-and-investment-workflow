@@ -1,4 +1,4 @@
-import { getDb, saveDbToDisk } from "./db";
+import { getDb, saveDbToDisk, withTransaction } from "./db";
 import { getInitialSbgProject } from "./seedData";
 import type {
   ProjectState,
@@ -89,6 +89,8 @@ export async function getProjectById(projectId: string): Promise<ProjectState | 
         verification_criteria: String(obj.conditions_json),
         verification_timeframe: String(obj.timeframe),
         current_status: obj.current_status as ThesisStatus,
+        current_reason: obj.current_reason ? String(obj.current_reason) : undefined,
+        user_revision: obj.user_revision ? String(obj.user_revision) : undefined,
         citations: JSON.parse(String(obj.citations_json || "[]")),
         updated_at: String(obj.updated_at),
       });
@@ -185,113 +187,114 @@ export async function getProjectById(projectId: string): Promise<ProjectState | 
 }
 
 export async function saveFullProject(project: ProjectState): Promise<void> {
-  const db = await getDb();
-
-  // Upsert project
-  db.run(
-    `INSERT OR REPLACE INTO projects (id, name, company, ticker, current_version, status, summary, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      project.id,
-      project.name,
-      project.company,
-      project.ticker,
-      project.current_version,
-      project.status,
-      project.summary,
-      project.created_at,
-      project.updated_at,
-    ]
-  );
-
-  // Clear & re-insert documents
-  db.run(`DELETE FROM documents WHERE project_id = ?`, [project.id]);
-  for (const doc of project.documents) {
+  await withTransaction((db) => {
+    // Upsert project
     db.run(
-      `INSERT INTO documents (id, project_id, source_type, title, disclosure_date, content, added_at, evidence_snippets_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO projects (id, name, company, ticker, current_version, status, summary, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        doc.id,
         project.id,
-        doc.source_type,
-        doc.title,
-        doc.disclosure_date,
-        doc.content,
-        doc.added_at,
-        JSON.stringify(doc.evidence_snippets || []),
+        project.name,
+        project.company,
+        project.ticker,
+        project.current_version,
+        project.status,
+        project.summary,
+        project.created_at,
+        project.updated_at,
       ]
     );
-  }
 
-  // Clear & re-insert theses
-  db.run(`DELETE FROM theses WHERE project_id = ?`, [project.id]);
-  for (const th of project.theses) {
-    db.run(
-      `INSERT INTO theses (id, project_id, title, original_view, formed_at, basis, conditions_json, timeframe, current_status, citations_json, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        th.id,
-        project.id,
-        th.title,
-        th.original_view,
-        th.formed_at,
-        th.basis,
-        th.verification_criteria,
-        th.verification_timeframe,
-        th.current_status,
-        JSON.stringify(th.citations || []),
-        th.updated_at,
-      ]
-    );
-  }
+    // Clear & re-insert documents
+    db.run(`DELETE FROM documents WHERE project_id = ?`, [project.id]);
+    for (const doc of project.documents) {
+      db.run(
+        `INSERT INTO documents (id, project_id, source_type, title, disclosure_date, content, added_at, evidence_snippets_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          doc.id,
+          project.id,
+          doc.source_type,
+          doc.title,
+          doc.disclosure_date,
+          doc.content,
+          doc.added_at,
+          JSON.stringify(doc.evidence_snippets || []),
+        ]
+      );
+    }
 
-  // Clear & re-insert updates
-  db.run(`DELETE FROM research_updates WHERE project_id = ?`, [project.id]);
-  for (const u of project.updates) {
-    db.run(
-      `INSERT INTO research_updates (id, project_id, version, parent_version, title, material_id, thesis_deltas_json, user_revisions_json, follow_up_questions_json, confirmed_at, confirmed_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        u.id,
-        project.id,
-        u.version,
-        u.parent_version || "",
-        u.title,
-        u.material_id,
-        JSON.stringify(u.thesis_deltas || []),
-        JSON.stringify(u.user_revisions || {}),
-        JSON.stringify(u.follow_up_questions || []),
-        u.confirmed_at,
-        u.confirmed_by,
-      ]
-    );
-  }
+    // Clear & re-insert theses
+    db.run(`DELETE FROM theses WHERE project_id = ?`, [project.id]);
+    for (const th of project.theses) {
+      db.run(
+        `INSERT INTO theses (id, project_id, title, original_view, formed_at, basis, conditions_json, timeframe, current_status, citations_json, updated_at, current_reason, user_revision)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          th.id,
+          project.id,
+          th.title,
+          th.original_view,
+          th.formed_at,
+          th.basis,
+          th.verification_criteria,
+          th.verification_timeframe,
+          th.current_status,
+          JSON.stringify(th.citations || []),
+          th.updated_at,
+          th.current_reason || null,
+          th.user_revision || null,
+        ]
+      );
+    }
 
-  // Clear & re-insert questions
-  db.run(`DELETE FROM questions WHERE project_id = ?`, [project.id]);
-  for (const q of project.open_questions) {
-    db.run(
-      `INSERT INTO questions (id, project_id, question_text, status, created_in_version, resolved_in_version, answer_notes, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        q.id,
-        project.id,
-        q.question_text,
-        q.status,
-        q.created_in_version,
-        q.resolved_in_version || null,
-        q.answer_notes,
-        q.updated_at,
-      ]
-    );
-  }
+    // Clear & re-insert updates
+    db.run(`DELETE FROM research_updates WHERE project_id = ?`, [project.id]);
+    for (const u of project.updates) {
+      db.run(
+        `INSERT INTO research_updates (id, project_id, version, parent_version, title, material_id, thesis_deltas_json, user_revisions_json, follow_up_questions_json, confirmed_at, confirmed_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          u.id,
+          project.id,
+          u.version,
+          u.parent_version || "",
+          u.title,
+          u.material_id,
+          JSON.stringify(u.thesis_deltas || []),
+          JSON.stringify(u.user_revisions || {}),
+          JSON.stringify(u.follow_up_questions || []),
+          u.confirmed_at,
+          u.confirmed_by,
+        ]
+      );
+    }
 
-  saveDbToDisk();
+    // Clear & re-insert questions
+    db.run(`DELETE FROM questions WHERE project_id = ?`, [project.id]);
+    for (const q of project.open_questions) {
+      db.run(
+        `INSERT INTO questions (id, project_id, question_text, status, created_in_version, resolved_in_version, answer_notes, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          q.id,
+          project.id,
+          q.question_text,
+          q.status,
+          q.created_in_version,
+          q.resolved_in_version || null,
+          q.answer_notes,
+          q.updated_at,
+        ]
+      );
+    }
+  });
 }
 
 export async function applyResearchUpdate(
   projectId: string,
   newVersion: string,
+  parentVersion: string | undefined | null,
   materialTitle: string,
   materialContent: string,
   deltas: ThesisDelta[],
@@ -302,13 +305,27 @@ export async function applyResearchUpdate(
   const project = await getProjectById(projectId);
   if (!project) throw new Error(`Project ${projectId} not found`);
 
-  // Prevent duplicate version processing
+  // Idempotency check: If newVersion has already been applied, return the current project state directly
   if (project.current_version === newVersion) {
-    console.warn(`Version ${newVersion} already applied to project ${projectId}, updating in place...`);
+    const existingUpdate = project.updates.find((u) => u.version === newVersion);
+    if (existingUpdate) {
+      console.warn(`Idempotent duplicate update call: version ${newVersion} already confirmed for ${projectId}`);
+      return project;
+    }
+  }
+
+  // Parent version validation
+  if (parentVersion && project.current_version !== parentVersion) {
+    const err: any = new Error(
+      `Version mismatch conflict: Expected parent version '${parentVersion}', but current version is '${project.current_version}'`
+    );
+    err.statusCode = 409;
+    throw err;
   }
 
   const now = new Date().toISOString();
-  const docId = `DOC_${newVersion}_${Date.now().toString(36)}`;
+  // Generate stable, collision-free document and update IDs
+  const docId = `DOC_${projectId}_${newVersion}_${Date.now().toString(36)}`;
 
   // 1. Add new document
   const newDoc: ResearchDocument = {
@@ -323,11 +340,15 @@ export async function applyResearchUpdate(
   };
   project.documents.push(newDoc);
 
-  // 2. Update theses based on deltas
+  // 2. Update theses based on deltas & userRevisions
   for (const delta of deltas) {
     const existing = project.theses.find((t) => t.id === delta.thesis_id);
     if (existing) {
       existing.current_status = delta.new_status;
+      existing.current_reason = delta.reason;
+      if (userRevisions && userRevisions[delta.thesis_id]) {
+        existing.user_revision = userRevisions[delta.thesis_id];
+      }
       existing.updated_at = now;
       if (delta.evidence_ids && delta.evidence_ids.length > 0) {
         existing.citations = Array.from(new Set([...existing.citations, ...delta.evidence_ids]));
@@ -335,19 +356,23 @@ export async function applyResearchUpdate(
     }
   }
 
-  // 3. Update questions
+  // 3. Update questions (stable IDs)
   for (const q of questions) {
     const idx = project.open_questions.findIndex((item) => item.id === q.id);
     if (idx >= 0) {
       project.open_questions[idx] = { ...project.open_questions[idx], ...q, updated_at: now };
     } else {
-      project.open_questions.push({ ...q, updated_at: now });
+      // Ensure cross-project collision-free ID
+      const stableQId = q.id && !project.open_questions.some((item) => item.id === q.id)
+        ? q.id
+        : `${projectId}_Q${String(project.open_questions.length + 1).padStart(2, "0")}`;
+      project.open_questions.push({ ...q, id: stableQId, updated_at: now });
     }
   }
 
   // 4. Record research update
   const updateRecord: ResearchUpdate = {
-    id: `UPDATE_${newVersion}_${Date.now().toString(36)}`,
+    id: `UPDATE_${projectId}_${newVersion}_${Date.now().toString(36)}`,
     project_id: projectId,
     version: newVersion,
     parent_version: project.current_version,

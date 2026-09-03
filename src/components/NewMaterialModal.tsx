@@ -9,6 +9,7 @@ interface NewMaterialModalProps {
   onRunAnalysis: (title: string, content: string) => Promise<any>;
   onApplyUpdate: (data: {
     newVersion: string;
+    parentVersion: string;
     materialTitle: string;
     materialContent: string;
     deltas: any[];
@@ -42,7 +43,41 @@ export const NewMaterialModal: React.FC<NewMaterialModalProps> = ({
   const [modifiedDeltas, setModifiedDeltas] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Reset modal state whenever opened or when active project/version changes
+  React.useEffect(() => {
+    if (isOpen) {
+      setTitle(`${project.company} ${nextVersion} 轮增量调研与披露材料`);
+      setContent("");
+      setIsAnalyzing(false);
+      setIsSaving(false);
+      setAnalysisResult(null);
+      setUserRevisions({});
+      setModifiedDeltas([]);
+      setError(null);
+    }
+  }, [isOpen, project.id, project.current_version]);
+
   if (!isOpen) return null;
+
+  const handleTitleChange = (newTitle: string) => {
+    setTitle(newTitle);
+    if (analysisResult) {
+      // Invalidate existing draft when material changes
+      setAnalysisResult(null);
+      setModifiedDeltas([]);
+      setUserRevisions({});
+    }
+  };
+
+  const handleContentChange = (newContent: string) => {
+    setContent(newContent);
+    if (analysisResult) {
+      // Invalidate existing draft when material changes
+      setAnalysisResult(null);
+      setModifiedDeltas([]);
+      setUserRevisions({});
+    }
+  };
 
   const handleLoadSampleT2 = async () => {
     try {
@@ -50,6 +85,9 @@ export const NewMaterialModal: React.FC<NewMaterialModalProps> = ({
       const sample = await res.json();
       setTitle(sample.title);
       setContent(sample.content);
+      setAnalysisResult(null);
+      setModifiedDeltas([]);
+      setUserRevisions({});
       setError(null);
     } catch (err: any) {
       setError("无法加载 T2 样例材料");
@@ -76,6 +114,9 @@ export const NewMaterialModal: React.FC<NewMaterialModalProps> = ({
 
     setTitle(`${project.company} ${nextVersion} 业务跟踪与运营交流纪要`);
     setContent(defaultTemplate);
+    setAnalysisResult(null);
+    setModifiedDeltas([]);
+    setUserRevisions({});
     setError(null);
   };
 
@@ -111,9 +152,11 @@ export const NewMaterialModal: React.FC<NewMaterialModalProps> = ({
   const handleConfirmSave = async () => {
     if (!analysisResult) return;
     setIsSaving(true);
+    setError(null);
     try {
       await onApplyUpdate({
         newVersion: nextVersion,
+        parentVersion: currentVersion,
         materialTitle: title,
         materialContent: content,
         deltas: modifiedDeltas,
@@ -129,6 +172,7 @@ export const NewMaterialModal: React.FC<NewMaterialModalProps> = ({
       });
       onClose();
     } catch (err: any) {
+      // Retain edited draft content so user doesn't lose modifications
       setError(String(err?.message || err));
     } finally {
       setIsSaving(false);
@@ -197,7 +241,7 @@ export const NewMaterialModal: React.FC<NewMaterialModalProps> = ({
               <input
                 type="text"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => handleTitleChange(e.target.value)}
                 placeholder="例如：圣邦股份2026年一季度经营交流纪要"
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 font-medium"
               />
@@ -209,7 +253,7 @@ export const NewMaterialModal: React.FC<NewMaterialModalProps> = ({
               <textarea
                 rows={7}
                 value={content}
-                onChange={(e) => setContent(e.target.value)}
+                onChange={(e) => handleContentChange(e.target.value)}
                 placeholder="粘贴新公告正文、投资者关系记录、车规认证资质、产能交付进展等定性或定量材料..."
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-blue-500 font-sans leading-relaxed"
               />

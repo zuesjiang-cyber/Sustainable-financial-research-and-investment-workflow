@@ -37,6 +37,8 @@ export interface ThesisRecord {
   current_status: string;
   citations_json: string;
   updated_at: string;
+  current_reason?: string;
+  user_revision?: string;
 }
 
 export interface ResearchUpdateRecord {
@@ -90,7 +92,7 @@ export async function getDb(): Promise<Database> {
   return dbInstance;
 }
 
-export function saveDbToDisk() {
+export function saveDbToDisk(): void {
   if (!dbInstance) return;
   try {
     const data = dbInstance.export();
@@ -98,6 +100,25 @@ export function saveDbToDisk() {
     fs.writeFileSync(DB_FILE, buffer);
   } catch (err) {
     console.error("Failed to persist database to disk:", err);
+    throw new Error(`Database disk persistence failure: ${String(err?.message || err)}`);
+  }
+}
+
+export async function withTransaction<T>(callback: (db: Database) => Promise<T> | T): Promise<T> {
+  const db = await getDb();
+  db.run("BEGIN TRANSACTION;");
+  try {
+    const result = await callback(db);
+    db.run("COMMIT;");
+    saveDbToDisk();
+    return result;
+  } catch (err) {
+    try {
+      db.run("ROLLBACK;");
+    } catch (rollbackErr) {
+      console.error("Transaction rollback error:", rollbackErr);
+    }
+    throw err;
   }
 }
 
@@ -137,7 +158,9 @@ function initSchema(db: Database) {
       timeframe TEXT NOT NULL,
       current_status TEXT NOT NULL,
       citations_json TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      current_reason TEXT,
+      user_revision TEXT
     );
 
     CREATE TABLE IF NOT EXISTS research_updates (
@@ -165,4 +188,12 @@ function initSchema(db: Database) {
       updated_at TEXT NOT NULL
     );
   `);
+
+  // Run dynamic migrations for any existing columns in older database instances
+  try {
+    db.run("ALTER TABLE theses ADD COLUMN current_reason TEXT;");
+  } catch (_ignored) {}
+  try {
+    db.run("ALTER TABLE theses ADD COLUMN user_revision TEXT;");
+  } catch (_ignored) {}
 }

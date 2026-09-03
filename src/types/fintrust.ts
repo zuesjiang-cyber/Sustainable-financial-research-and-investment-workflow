@@ -209,6 +209,8 @@ export interface ResearchThesis {
   verification_criteria: string;
   verification_timeframe: string;
   current_status: ThesisStatus;
+  current_reason?: string;
+  user_revision?: string;
   citations: string[];
   updated_at: string;
 }

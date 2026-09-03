@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { buildResearchContext, type ResearchContext } from "./buildResearchContext";
 import type {
   ProjectState,
   ThesisDelta,
@@ -28,6 +29,9 @@ export async function runContinuousAnalysis(
   const nextVersion = currentVersion === "T0" ? "T1" : currentVersion === "T1" ? "T2" : `T${parseInt(currentVersion.replace("T", "") || "1") + 1}`;
   const startTime = Date.now();
 
+  // Construct continuous research context
+  const researchContext = buildResearchContext(project, nextVersion);
+
   const apiKey = process.env.GEMINI_API_KEY;
   const snippets = newMaterial.snippets || [];
   const textContent = newMaterial.content;
@@ -38,13 +42,7 @@ export async function runContinuousAnalysis(
       const ai = new GoogleGenAI({ apiKey });
       const prompt = `你是一名严格、客观的买方资深半导体/金融行业研究员。正在进行【${project.company}】的持续研究跟踪（版本由 ${currentVersion} 推进至 ${nextVersion}）。
 
-【已有研究状态（截至 ${currentVersion}）】：
-公司：${project.company} (${project.ticker})
-现有核心观点与追踪阈值：
-${project.theses.map((t) => `- [${t.id}] ${t.title}: 当前评级=${t.current_status}；原观点=${t.original_view}；验证标准=${t.verification_criteria}`).join("\n")}
-
-历史遗留未解决疑问：
-${project.open_questions.map((q) => `- [${q.id}] 状态=${q.status}: ${q.question_text} (上次笔记: ${q.answer_notes || "无"})`).join("\n")}
+${researchContext.prompt_context_text}
 
 【本轮增量材料 (${nextVersion})】：
 材料名称：《${newMaterial.title}》
@@ -52,11 +50,12 @@ ${project.open_questions.map((q) => `- [${q.id}] 状态=${q.status}: ${q.questio
 ${textContent}
 
 【分析硬约束】：
-1. 这是持续跟踪，不是从零开始重新写公司概况！请直接针对已有观点评估最新材料支持/削弱程度。
-2. 严禁把未披露视为反向证据，严禁把券商预测当做已实现业绩。
-3. 若本轮材料主要为定性运营材料或季度简报，缺少全套财务数据，绝对不要报错或拒绝分析，应当依托定性进展（如料号认证、良率、产能交付）推进定性观点！
-4. 必须逐项给出 Gap 归因：观察到什么 (observed)、材料给出什么解释 (disclosed_reason)、尚待验证的可能原因 (unverified_hypotheses)。
-5. 必须对照已有疑问：回答哪些疑问被解决、哪些仍未解决、新增什么新疑问。
+1. 这是持续跟踪，不是从零开始重新写公司概况！必须严格基于上方【持续研究记忆上下文】中已确认的观点与未决疑问进行增量比对。
+2. ★特别注意：若观点存在【分析师已确认修正/新研究假设】，必须优先以该修正视角为基准核验新材料，绝不能退回旧初始观点或直接忽略分析师的判定！
+3. 严禁把未披露视为反向证据，严禁把券商预测当做已实现业绩。
+4. 若本轮材料主要为定性运营材料或季度简报，缺少全套财务数据，绝对不要报错或拒绝分析，应当依托定性进展（如料号认证、良率、产能交付）推进定性观点！
+5. 必须逐项给出 Gap 归因：观察到什么 (observed)、材料给出什么解释 (disclosed_reason)、尚待验证的可能原因 (unverified_hypotheses)。
+6. 必须对照前期遗留疑问：回答哪些疑问被解决、哪些仍未解决、新增什么新疑问。
 
 请以纯 JSON 格式输出，不要有 Markdown 代码块前缀或包裹，JSON 结构如下：
 {
@@ -85,16 +84,24 @@ ${textContent}
   "new_questions": [
     {
       "id": "Q03",
-      "question_text": "本轮新涌现的待核实疑问"
+      "question_text": "...",
+      "status": "未解决"
     }
   ],
-  "overall_summary": "本轮增量更新的买方核心结论"
+  "overall_summary": "一两句话概括本轮核心变化"
 }`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
-        contents: prompt,
-      });
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Gemini API call timed out after 8000ms")), 8000)
+      );
+
+      const response: any = await Promise.race([
+        ai.models.generateContent({
+          model: "gemini-3.8-flash",
+          contents: prompt,
+        }),
+        timeoutPromise,
+      ]);
 
       const responseText = response.text || "";
       const latency = Date.now() - startTime;
@@ -173,16 +180,17 @@ ${textContent}
       };
     } catch (err: any) {
       console.warn("Real Gemini call encountered error, falling back to deterministic continuous rules:", err);
-      return runDeterministicContinuousAnalysis(project, newMaterial, nextVersion, startTime, String(err?.message || err));
+      return runDeterministicContinuousAnalysis(project, researchContext, newMaterial, nextVersion, startTime, String(err?.message || err));
     }
   }
 
   // Fallback to pure deterministic evaluation if no API key is set
-  return runDeterministicContinuousAnalysis(project, newMaterial, nextVersion, startTime);
+  return runDeterministicContinuousAnalysis(project, researchContext, newMaterial, nextVersion, startTime);
 }
 
 function runDeterministicContinuousAnalysis(
   project: ProjectState,
+  researchContext: ResearchContext,
   newMaterial: {
     title: string;
     content: string;
@@ -265,6 +273,12 @@ function runDeterministicContinuousAnalysis(
       observed = "本轮材料未检索到直接对应的事实陈述段落。";
       disclosed = "材料重点披露其他维度的运营或业务动态。";
       unverified = `需在后续专项披露或定期财报中核验【${thesis.verification_criteria || thesis.title}】。`;
+    }
+
+    const thesisCtx = researchContext.theses.find((t) => t.id === thesis.id);
+    if (thesisCtx?.user_revision) {
+      unverified = `★【前轮分析师已确认修正视界】: ${thesisCtx.user_revision}；${unverified}`;
+      reason = `${reason} (结合前轮分析师复核修正持续对账)`;
     }
 
     deltas.push({

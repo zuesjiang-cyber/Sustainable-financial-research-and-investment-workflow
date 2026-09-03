@@ -14,6 +14,7 @@ import {
   deleteProjectQuestion,
 } from "./src/server/projectRepo";
 import { runContinuousAnalysis } from "./src/server/continuousAnalyzer";
+import { buildResearchContext } from "./src/server/buildResearchContext";
 import { SAMPLE_T2_MATERIAL, loadCaseInput, getInitialSbgProject } from "./src/server/seedData";
 import type { CaseInput, ProjectState, FollowUpQuestion } from "./src/types/fintrust";
 
@@ -209,13 +210,37 @@ async function startServer() {
     }
   });
 
+  // Build continuous research memory context for the next round of analysis
+  app.get("/api/projects/:id/context", async (req, res) => {
+    try {
+      const project = await getProjectById(req.params.id);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+      const targetVersion = req.query.targetVersion as string | undefined;
+      const context = buildResearchContext(project, targetVersion);
+      res.json(context);
+    } catch (err: any) {
+      console.error("Failed to build research context:", err);
+      res.status(500).json({ error: String(err?.message || err) });
+    }
+  });
+
   // Apply and save a confirmed research update (T1, T2)
   app.post("/api/projects/:id/update", async (req, res) => {
     try {
-      const { newVersion, materialTitle, materialContent, deltas, userRevisions, questions, evidenceSnippets } = req.body;
+      const {
+        newVersion,
+        parentVersion,
+        materialTitle,
+        materialContent,
+        deltas,
+        userRevisions,
+        questions,
+        evidenceSnippets,
+      } = req.body;
       const updated = await applyResearchUpdate(
         req.params.id,
         newVersion,
+        parentVersion,
         materialTitle,
         materialContent,
         deltas,
@@ -226,7 +251,8 @@ async function startServer() {
       res.json(updated);
     } catch (err: any) {
       console.error("Failed to apply update:", err);
-      res.status(500).json({ error: String(err?.message || err) });
+      const status = err?.statusCode || 500;
+      res.status(status).json({ error: String(err?.message || err) });
     }
   });
 

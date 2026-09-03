@@ -197,11 +197,13 @@ export default function App() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-    if (res.ok) {
-      const updated = await res.json();
-      setActiveProject(updated);
-      await loadProjects();
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error || `保存更新失败 (HTTP ${res.status})`);
     }
+    const updated = await res.json();
+    setActiveProject(updated);
+    await loadProjects();
   };
 
   // Update Thesis

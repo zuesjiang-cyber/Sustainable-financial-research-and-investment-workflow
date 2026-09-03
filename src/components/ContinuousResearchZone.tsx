@@ -51,6 +51,7 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
   const [editCriteria, setEditCriteria] = useState("");
   const [editBasis, setEditBasis] = useState("");
   const [editStatus, setEditStatus] = useState<ThesisStatus>("保持");
+  const [editUserRevision, setEditUserRevision] = useState("");
 
   // Questions state
   const [questionFilter, setQuestionFilter] = useState<"all" | "open" | "partially" | "resolved">("all");
@@ -75,6 +76,7 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
     setEditCriteria(t.verification_criteria);
     setEditBasis(t.basis);
     setEditStatus(t.current_status);
+    setEditUserRevision(t.user_revision || "");
   };
 
   const handleSaveEdit = async (thesisId: string) => {
@@ -83,6 +85,7 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
       verification_criteria: editCriteria,
       basis: editBasis,
       current_status: editStatus,
+      user_revision: editUserRevision.trim(),
     });
     setEditingThesisId(null);
   };
@@ -318,6 +321,16 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
                             className="w-full bg-slate-950 text-xs text-amber-300 font-mono border border-slate-700 rounded px-2.5 py-1.5 focus:border-amber-500 focus:outline-none"
                           />
                         </div>
+                        <div>
+                          <label className="block text-[11px] text-purple-300 mb-1">★ 分析师复核修订 / 持续研报记忆假设 (user_revision)</label>
+                          <textarea
+                            rows={2}
+                            value={editUserRevision}
+                            onChange={(e) => setEditUserRevision(e.target.value)}
+                            placeholder="输入分析师的人工研判修正，下轮 AI 对账将优先继承此视界..."
+                            className="w-full bg-slate-950 text-xs text-purple-200 font-sans border border-purple-700/60 rounded px-2.5 py-1.5 focus:border-purple-500 focus:outline-none"
+                          />
+                        </div>
                         <div className="flex justify-end gap-2 pt-1">
                           <button
                             onClick={() => setEditingThesisId(null)}
@@ -391,6 +404,21 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
                             <span className="text-slate-500 font-medium">最新核验依据：</span>
                             <span className="text-slate-200 font-sans font-medium">{thesis.basis}</span>
                           </div>
+                          {thesis.current_reason && thesis.current_reason !== thesis.basis && (
+                            <div>
+                              <span className="text-blue-400/90 font-medium">本轮结论推导：</span>
+                              <span className="text-slate-300 font-sans">{thesis.current_reason}</span>
+                            </div>
+                          )}
+                          {thesis.user_revision && (
+                            <div className="mt-1 p-2 bg-purple-950/40 border border-purple-800/60 rounded-lg text-xs space-y-1">
+                              <div className="flex items-center gap-1.5 text-purple-300 font-semibold text-[11px]">
+                                <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                                <span>分析师已确认修正视界 (已持久化至研究记忆)</span>
+                              </div>
+                              <p className="text-purple-200 font-sans text-xs leading-relaxed">{thesis.user_revision}</p>
+                            </div>
+                          )}
                           <div className="pt-2 border-t border-slate-800/60 flex flex-wrap items-center justify-between gap-2 text-[11px]">
                             <span className="text-amber-400/95 font-mono">
                               验证门槛：{thesis.verification_criteria}
