@@ -25,7 +25,15 @@ import {
   Trash2,
   CheckSquare,
 } from "lucide-react";
-import type { ProjectState, ResearchThesis, ThesisStatus, FollowUpQuestion, ResearchUpdate } from "../types/fintrust";
+import type {
+  ProjectState,
+  ResearchClaim,
+  ResearchThesis,
+  ResearchToolTrace,
+  ThesisStatus,
+  FollowUpQuestion,
+  ResearchUpdate,
+} from "../types/fintrust";
 
 interface ContinuousResearchZoneProps {
   project: ProjectState;
@@ -52,6 +60,10 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
   const [editBasis, setEditBasis] = useState("");
   const [editStatus, setEditStatus] = useState<ThesisStatus>("保持");
   const [editUserRevision, setEditUserRevision] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+  const [questionError, setQuestionError] = useState<string | null>(null);
+  const [savingThesisId, setSavingThesisId] = useState<string | null>(null);
+  const [savingQuestionId, setSavingQuestionId] = useState<string | null>(null);
 
   // Questions state
   const [questionFilter, setQuestionFilter] = useState<"all" | "open" | "partially" | "resolved">("all");
@@ -69,8 +81,20 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
     : latestUpdate;
 
   const historyUpdates = [...project.updates].reverse();
+  const hasModelSnapshot = Boolean(activeUpdate?.original_deltas && activeUpdate.original_deltas.length > 0);
+  const modelDeltas = hasModelSnapshot ? activeUpdate?.original_deltas || [] : [];
+
+  const claimStatusText = (status: ResearchClaim["verification"]) =>
+    status === "verified" ? "来源已核验" : status === "contradicted" ? "来源矛盾" : "尚未解决";
+  const claimStatusClass = (status: ResearchClaim["verification"]) =>
+    status === "verified"
+      ? "text-emerald-300 bg-emerald-950 border-emerald-800"
+      : status === "contradicted"
+      ? "text-rose-300 bg-rose-950 border-rose-800"
+      : "text-amber-300 bg-amber-950 border-amber-800";
 
   const handleStartEdit = (t: ResearchThesis) => {
+    setEditError(null);
     setEditingThesisId(t.id);
     setEditTitle(t.title);
     setEditCriteria(t.verification_criteria);
@@ -80,21 +104,41 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
   };
 
   const handleSaveEdit = async (thesisId: string) => {
-    await onUpdateThesis(thesisId, {
-      title: editTitle,
-      verification_criteria: editCriteria,
-      basis: editBasis,
-      current_status: editStatus,
-      user_revision: editUserRevision.trim(),
-    });
-    setEditingThesisId(null);
+    const original = project.theses.find((thesis) => thesis.id === thesisId);
+    if (!original) return;
+    const updates: Partial<ResearchThesis> = {};
+    if (editTitle !== original.title) updates.title = editTitle;
+    if (editCriteria !== original.verification_criteria) updates.verification_criteria = editCriteria;
+    if (editBasis !== original.basis) updates.basis = editBasis;
+    if (editStatus !== original.current_status) updates.current_status = editStatus;
+    const nextRevision = editUserRevision.trim();
+    if (nextRevision !== (original.user_revision || "")) updates.user_revision = nextRevision;
+    if (Object.keys(updates).length === 0) {
+      setEditingThesisId(null);
+      return;
+    }
+    setSavingThesisId(thesisId);
+    setEditError(null);
+    try {
+      await onUpdateThesis(thesisId, updates);
+      setEditingThesisId(null);
+    } catch (err: any) {
+      setEditError(String(err?.message || err || "保存观点失败"));
+    } finally {
+      setSavingThesisId(null);
+    }
   };
 
   const handleCreateQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newQuestionText.trim()) return;
-    await onAddQuestion(newQuestionText.trim());
-    setNewQuestionText("");
+    setQuestionError(null);
+    try {
+      await onAddQuestion(newQuestionText.trim());
+      setNewQuestionText("");
+    } catch (err: any) {
+      setQuestionError(String(err?.message || err || "新增疑问失败"));
+    }
   };
 
   const handleStartEditQuestionNote = (q: FollowUpQuestion) => {
@@ -103,11 +147,16 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
   };
 
   const handleSaveQuestionNote = async (q: FollowUpQuestion) => {
-    await onUpdateQuestion({
-      ...q,
-      answer_notes: editingQuestionNote,
-    });
-    setEditingQuestionId(null);
+    setSavingQuestionId(q.id);
+    setQuestionError(null);
+    try {
+      await onUpdateQuestion({ ...q, answer_notes: editingQuestionNote });
+      setEditingQuestionId(null);
+    } catch (err: any) {
+      setQuestionError(String(err?.message || err || "保存疑问失败"));
+    } finally {
+      setSavingQuestionId(null);
+    }
   };
 
   const filteredQuestions = project.open_questions.filter((q) => {
@@ -122,40 +171,59 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
       case "加强":
       case "支持":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-700/60">
-            <TrendingUp className="w-3.5 h-3.5" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-950/90 text-emerald-300 border border-emerald-500/40 badge-glow-emerald">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
             {status}
           </span>
         );
       case "削弱":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-950/80 text-rose-300 border border-rose-700/60">
-            <TrendingDown className="w-3.5 h-3.5" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-950/90 text-rose-300 border border-rose-500/40 badge-glow-rose">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse"></span>
+            <TrendingDown className="w-3.5 h-3.5 text-rose-400" />
             {status}
           </span>
         );
       case "部分支持":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-950/80 text-blue-300 border border-blue-700/60">
-            <Sparkles className="w-3.5 h-3.5" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-950/90 text-blue-300 border border-blue-500/40 badge-glow-blue">
+            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
             部分支持
           </span>
         );
       case "不足以判断":
       case "待评估":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-950/80 text-amber-300 border border-amber-700/60">
-            <HelpCircle className="w-3.5 h-3.5" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-950/90 text-amber-300 border border-amber-500/40">
+            <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
             {status}
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-            <Minus className="w-3.5 h-3.5" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-800/90 text-slate-300 border border-slate-700">
+            <Minus className="w-3.5 h-3.5 text-slate-400" />
             保持
           </span>
         );
+    }
+  };
+
+  const getThesisBorderColor = (status: ThesisStatus) => {
+    switch (status) {
+      case "加强":
+      case "支持":
+        return "border-l-4 border-l-emerald-500 hover:border-l-emerald-400 shadow-emerald-950/20";
+      case "削弱":
+        return "border-l-4 border-l-rose-500 hover:border-l-rose-400 shadow-rose-950/20";
+      case "部分支持":
+        return "border-l-4 border-l-blue-500 hover:border-l-blue-400 shadow-blue-950/20";
+      case "不足以判断":
+      case "待评估":
+        return "border-l-4 border-l-amber-500 hover:border-l-amber-400 shadow-amber-950/20";
+      default:
+        return "border-l-4 border-l-slate-600 hover:border-l-slate-500";
     }
   };
 
@@ -169,6 +237,22 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
       }
     }
     return trajectory;
+  };
+
+  const getRoundAssessment = (thesisId: string) => {
+    const delta = latestUpdate?.thesis_deltas.find((item) => item.thesis_id === thesisId);
+    switch (delta?.round_assessment) {
+      case "supported":
+        return "支持本轮判断";
+      case "weakened":
+        return "削弱本轮判断";
+      case "unresolved":
+        return "本轮未解决";
+      case "unchanged":
+        return "本轮未改变";
+      default:
+        return "本轮未标注";
+    }
   };
 
   const nextVersionTag =
@@ -264,6 +348,7 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
                 {project.theses.length} 项核心观点 · {project.open_questions.filter((q) => q.status === "已解决").length}/{project.open_questions.length} 疑问已核验
               </span>
             </div>
+            {editError && <div className="rounded-lg border border-rose-800 bg-rose-950/45 px-3 py-2 text-xs text-rose-300">观点保存失败：{editError}</div>}
 
             {/* Thesis Cards */}
             <div className="space-y-4">
@@ -274,7 +359,7 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
                 return (
                   <div
                     key={thesis.id}
-                    className="bg-slate-950 rounded-xl p-4 border border-slate-800/90 hover:border-slate-700/80 transition-all space-y-3 shadow-xs"
+                    className={`bg-slate-950 rounded-2xl p-4 md:p-5 border border-slate-800/90 hover:border-slate-700/80 transition-all space-y-3.5 shadow-md ${getThesisBorderColor(thesis.current_status)}`}
                   >
                     {isEditing ? (
                       /* Inline Thesis Editor */
@@ -340,7 +425,8 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
                           </button>
                           <button
                             onClick={() => handleSaveEdit(thesis.id)}
-                            className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                            disabled={savingThesisId === thesis.id}
+                            className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded text-xs font-semibold flex items-center gap-1 cursor-pointer"
                           >
                             <Check className="w-3.5 h-3.5" /> 保存更新
                           </button>
@@ -357,33 +443,38 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
                             </div>
                             {/* Version Trajectory Sequence */}
                             {trajectory.length > 1 && (
-                              <div className="flex items-center gap-1 pt-0.5 text-[10px] font-mono">
-                                <span className="text-slate-500">轨迹:</span>
-                                {trajectory.map((step, i) => (
-                                  <span key={step.version} className="flex items-center gap-1 text-slate-400">
-                                    <span className="text-slate-500">{step.version}</span>
-                                    <span
-                                      className={
-                                        step.status === "支持" || step.status === "加强"
-                                          ? "text-emerald-400"
-                                          : step.status === "削弱"
-                                          ? "text-rose-400"
-                                          : step.status === "部分支持"
-                                          ? "text-blue-400"
-                                          : "text-slate-400"
-                                      }
-                                    >
-                                      {step.status}
+                              <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] font-mono">
+                                <span className="text-slate-500 font-semibold text-[10px] uppercase tracking-wider">演进路径:</span>
+                                <div className="inline-flex items-center gap-1 bg-slate-900/90 px-2 py-0.5 rounded-lg border border-slate-800">
+                                  {trajectory.map((step, i) => (
+                                    <span key={step.version} className="flex items-center gap-1">
+                                      <span className="text-slate-400 font-bold">{step.version}</span>
+                                      <span
+                                        className={`font-semibold ${
+                                          step.status === "支持" || step.status === "加强"
+                                            ? "text-emerald-400"
+                                            : step.status === "削弱"
+                                            ? "text-rose-400"
+                                            : step.status === "部分支持"
+                                            ? "text-blue-400"
+                                            : "text-slate-400"
+                                        }`}
+                                      >
+                                        {step.status}
+                                      </span>
+                                      {i < trajectory.length - 1 && <span className="text-slate-600 mx-0.5">→</span>}
                                     </span>
-                                    {i < trajectory.length - 1 && <span className="text-slate-600">→</span>}
-                                  </span>
-                                ))}
+                                  ))}
+                                </div>
                               </div>
                             )}
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
                             {getStatusBadge(thesis.current_status)}
+                            <span className="px-2 py-1 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700" title="本轮评估与已确认当前状态分开记录">
+                              本轮：{getRoundAssessment(thesis.id)}
+                            </span>
                             <button
                               onClick={() => handleStartEdit(thesis)}
                               className="p-1 text-slate-500 hover:text-slate-200 rounded cursor-pointer transition-colors"
@@ -401,22 +492,24 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
                             <span className="text-slate-400 font-sans">{thesis.original_view}</span>
                           </div>
                           <div>
-                            <span className="text-slate-500 font-medium">最新核验依据：</span>
-                            <span className="text-slate-200 font-sans font-medium">{thesis.basis}</span>
+                            <span className="text-blue-300 font-medium">当前观点 (已确认)：</span>
+                            <span className="text-slate-200 font-sans font-medium">{thesis.current_view || thesis.original_view}</span>
                           </div>
-                          {thesis.current_reason && thesis.current_reason !== thesis.basis && (
-                            <div>
-                              <span className="text-blue-400/90 font-medium">本轮结论推导：</span>
-                              <span className="text-slate-300 font-sans">{thesis.current_reason}</span>
-                            </div>
-                          )}
+                          <div>
+                            <span className="text-slate-500 font-medium">基线依据：</span>
+                            <span className="text-slate-400 font-sans">{thesis.basis || "未提供"}</span>
+                          </div>
+                          <div>
+                            <span className="text-blue-400/90 font-medium">当前理由 (已确认)：</span>
+                            <span className="text-slate-300 font-sans">{thesis.current_reason || "尚未形成独立的当前理由"}</span>
+                          </div>
                           {thesis.user_revision && (
-                            <div className="mt-1 p-2 bg-purple-950/40 border border-purple-800/60 rounded-lg text-xs space-y-1">
-                              <div className="flex items-center gap-1.5 text-purple-300 font-semibold text-[11px]">
+                            <div className="mt-2 p-3 bg-gradient-to-r from-purple-950/50 via-indigo-950/30 to-purple-950/50 border border-purple-500/40 rounded-xl text-xs space-y-1.5 shadow-sm">
+                              <div className="flex items-center gap-1.5 text-purple-300 font-bold text-[11px]">
                                 <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                                <span>分析师已确认修正视界 (已持久化至研究记忆)</span>
+                                <span>★ 买方分析师人工修订（已确权持久化，作为下轮先验假设）</span>
                               </div>
-                              <p className="text-purple-200 font-sans text-xs leading-relaxed">{thesis.user_revision}</p>
+                              <p className="text-purple-100 font-sans text-xs leading-relaxed pl-5 bg-purple-950/40 p-2 rounded-lg border border-purple-800/40">{thesis.user_revision}</p>
                             </div>
                           )}
                           <div className="pt-2 border-t border-slate-800/60 flex flex-wrap items-center justify-between gap-2 text-[11px]">
@@ -495,6 +588,8 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
               </div>
             </div>
 
+            {questionError && <div className="rounded-lg border border-rose-800 bg-rose-950/45 px-3 py-2 text-xs text-rose-300">疑问操作失败：{questionError}</div>}
+
             <div className="space-y-3">
               {filteredQuestions.map((q) => (
                 <div
@@ -539,7 +634,8 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
                         </button>
                         <button
                           onClick={() => handleSaveQuestionNote(q)}
-                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-semibold cursor-pointer"
+                          disabled={savingQuestionId === q.id}
+                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded text-[11px] font-semibold cursor-pointer"
                         >
                           保存笔记
                         </button>
@@ -567,18 +663,18 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
                         {q.answer_notes ? "修改笔记" : "写核验笔记"}
                       </button>
                       <button
-                        onClick={() => {
+                          onClick={() => {
                           const nextStatus: Record<string, "未解决" | "部分解决" | "已解决"> = {
                             未解决: "部分解决",
                             部分解决: "已解决",
                             已解决: "未解决",
                           };
                           const newStatus = nextStatus[q.status] || "未解决";
-                          onUpdateQuestion({
+                          void onUpdateQuestion({
                             ...q,
                             status: newStatus,
                             resolved_in_version: newStatus === "已解决" ? project.current_version : null,
-                          });
+                          }).catch((err: any) => setQuestionError(String(err?.message || err || "保存疑问失败")));
                         }}
                         className="text-slate-400 hover:text-emerald-400 cursor-pointer flex items-center gap-1"
                       >
@@ -587,7 +683,7 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
                       </button>
                       {onDeleteQuestion && (
                         <button
-                          onClick={() => onDeleteQuestion(q.id)}
+                          onClick={() => void onDeleteQuestion(q.id).catch((err: any) => setQuestionError(String(err?.message || err || "删除疑问失败")))}
                           className="text-slate-500 hover:text-rose-400 cursor-pointer"
                           title="删除该疑问"
                         >
@@ -673,7 +769,18 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                     观点增量演进 ({activeUpdate.thesis_deltas.length} 项)
                   </h4>
-                  {activeUpdate.thesis_deltas.map((d) => (
+                  {activeUpdate.thesis_deltas.map((d) => {
+                    const modelDelta = modelDeltas.find((candidate) => candidate.thesis_id === d.thesis_id);
+                    const assessment = d.round_assessment === "supported"
+                      ? "支持"
+                      : d.round_assessment === "weakened"
+                      ? "削弱"
+                      : d.round_assessment === "unresolved"
+                      ? "未解决"
+                      : d.round_assessment === "unchanged"
+                      ? "未改变"
+                      : "未标注";
+                    return (
                     <div key={d.thesis_id} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs space-y-2.5">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-white">{d.title}</span>
@@ -694,29 +801,46 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
                         </div>
                       </div>
 
-                      <p className="text-slate-300 text-[11px] leading-relaxed">{d.reason}</p>
+                      <div className="text-[10px] text-slate-500 flex flex-wrap gap-x-3 gap-y-1">
+                        <span>本轮评估：{assessment}</span>
+                        <span>当前状态：{d.new_status}</span>
+                      </div>
+                      {modelDelta && (
+                        <div className="rounded-lg border border-purple-900/60 bg-purple-950/20 p-2 text-[11px] text-purple-200">
+                          <span className="font-semibold text-purple-300">模型草稿：</span>{modelDelta.reason || "未提供理由"}
+                        </div>
+                      )}
+                      <div className="rounded-lg border border-blue-900/60 bg-blue-950/20 p-2 text-[11px] text-blue-100">
+                        <span className="font-semibold text-blue-300">用户确认：</span>{d.reason || "未提供理由"}
+                      </div>
 
                       {/* 3-part Gap Explanation Cards */}
-                      <div className="space-y-1.5 pt-1">
-                        <div className="bg-slate-900/90 rounded-lg p-2 text-[11px] border border-slate-800/80 text-slate-300 flex items-start gap-2">
-                          <Eye className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                          <div>
-                            <span className="text-emerald-400 font-semibold">事实观察：</span>
-                            {d.gap_explanation.observed}
+                      <div className="space-y-2 pt-1.5">
+                        <div className="bg-emerald-950/25 rounded-xl p-3 text-[11px] border border-emerald-800/40 text-slate-200 flex items-start gap-2.5 shadow-xs">
+                          <div className="p-1.5 bg-emerald-900/50 text-emerald-400 rounded-lg shrink-0 mt-0.5">
+                            <Eye className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="space-y-0.5">
+                            <span className="text-emerald-400 font-bold text-[11px] block">① 事实观察 (Observed Fact)</span>
+                            <p className="text-slate-300 leading-relaxed text-xs">{d.gap_explanation.observed}</p>
                           </div>
                         </div>
-                        <div className="bg-slate-900/90 rounded-lg p-2 text-[11px] border border-slate-800/80 text-slate-300 flex items-start gap-2">
-                          <FileText className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
-                          <div>
-                            <span className="text-blue-400 font-semibold">披露口径：</span>
-                            {d.gap_explanation.disclosed_reason}
+                        <div className="bg-blue-950/25 rounded-xl p-3 text-[11px] border border-blue-800/40 text-slate-200 flex items-start gap-2.5 shadow-xs">
+                          <div className="p-1.5 bg-blue-900/50 text-blue-400 rounded-lg shrink-0 mt-0.5">
+                            <FileText className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="space-y-0.5">
+                            <span className="text-blue-400 font-bold text-[11px] block">② 披露口径 (Disclosed Reason)</span>
+                            <p className="text-slate-300 leading-relaxed text-xs">{d.gap_explanation.disclosed_reason}</p>
                           </div>
                         </div>
-                        <div className="bg-slate-900/90 rounded-lg p-2 text-[11px] border border-slate-800/80 text-slate-300 flex items-start gap-2">
-                          <HelpCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                          <div>
-                            <span className="text-amber-400 font-semibold">待核实假说：</span>
-                            {d.gap_explanation.unverified_hypotheses}
+                        <div className="bg-amber-950/25 rounded-xl p-3 text-[11px] border border-amber-800/40 text-slate-200 flex items-start gap-2.5 shadow-xs">
+                          <div className="p-1.5 bg-amber-900/50 text-amber-400 rounded-lg shrink-0 mt-0.5">
+                            <HelpCircle className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="space-y-0.5">
+                            <span className="text-amber-400 font-bold text-[11px] block">③ 尚未验证假说 (Unverified Hypothesis)</span>
+                            <p className="text-slate-300 leading-relaxed text-xs">{d.gap_explanation.unverified_hypotheses}</p>
                           </div>
                         </div>
                       </div>
@@ -745,8 +869,48 @@ export const ContinuousResearchZone: React.FC<ContinuousResearchZoneProps> = ({
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
+
+                {/* Claims are retained separately from thesis deltas. */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">主张与来源核验</h4>
+                  {!activeUpdate.claims || activeUpdate.claims.length === 0 ? (
+                    <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-[11px] text-slate-500">
+                      本历史快照没有可展示的自动主张核验记录；不能据此推断来源已核验。
+                    </div>
+                  ) : (
+                    activeUpdate.claims.map((claim) => (
+                      <div key={claim.id} className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs space-y-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-slate-200 leading-relaxed">{claim.claim_text}</span>
+                          <span className={`px-1.5 py-0.5 rounded border text-[10px] shrink-0 ${claimStatusClass(claim.verification)}`}>
+                            {claimStatusText(claim.verification)}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500">类型：{claim.kind === "source" ? "来源" : claim.kind === "calculated" ? "计算" : "推断"} · {claim.explanation}</div>
+                        {claim.evidence_ids && claim.evidence_ids.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400">
+                            <span>来源：</span>
+                            {claim.evidence_ids.map((id) => <button key={id} onClick={() => onSelectEvidence(id)} className="text-blue-300 hover:underline font-mono cursor-pointer">{id}</button>)}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Keep the trace compact, but make the actual arguments/results inspectable. */}
+                <details className="group rounded-lg border border-slate-800 bg-slate-950">
+                  <summary className="flex items-center justify-between gap-2 px-3 py-2 text-xs font-semibold text-slate-400 cursor-pointer list-none">
+                    <span className="flex items-center gap-1.5"><ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" />工具调用轨迹（{activeUpdate.tool_trace?.length || 0}）</span>
+                    <span className="text-[10px] text-slate-600">展开查看真实参数与结果</span>
+                  </summary>
+                  <div className="px-3 pb-3 space-y-2">
+                    {!activeUpdate.tool_trace || activeUpdate.tool_trace.length === 0 ? <p className="text-[11px] text-slate-500">没有可展示的工具调用轨迹。</p> : activeUpdate.tool_trace.map((trace) => <div key={trace.id} className="rounded border border-slate-800 bg-slate-900 p-2 text-[10px] space-y-1"><div className="flex items-center justify-between"><span className="font-mono text-slate-200">{trace.tool}</span><span className={trace.status === "ok" ? "text-emerald-400" : "text-rose-400"}>{trace.status} · {trace.duration_ms}ms</span></div><div className="text-slate-500 whitespace-pre-wrap break-words">{typeof trace.result === "string" ? trace.result : JSON.stringify(trace.result, null, 2)}</div></div>)}
+                  </div>
+                </details>
               </div>
             ) : (
               <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 text-center space-y-3">

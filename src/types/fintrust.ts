@@ -78,9 +78,11 @@ export interface EvidenceItem {
   evidence_id: string;
   period: string;
   document: string;
-  page: number;
+  page: number | null;
   snippet: string;
-  image: string;
+  image?: string;
+  line_start?: number;
+  line_end?: number;
   is_synthetic_illustration?: boolean;
   checksum?: string;
   audit_disclaimer?: string;
@@ -163,7 +165,7 @@ export interface AnalysisMeta {
   llm_calls: number;
   latency_ms: number;
   retry_count: number;
-  execution_mode: "real_gemini" | "replay_stub" | "offline_math_only" | "degraded_error";
+  execution_mode: "real_gemini" | "real_openai_compatible" | "manual_review" | "test_fixture" | "replay_stub" | "offline_math_only" | "degraded_error";
   error_message?: string;
 }
 
@@ -197,6 +199,13 @@ export interface FollowUpQuestion {
   resolved_in_version?: string | null;
   answer_notes: string;
   updated_at: string;
+  evidence_ids?: string[];
+}
+
+export interface ThesisRevision {
+  at: string;
+  version: string;
+  changes: Partial<Pick<ResearchThesis, "title" | "basis" | "current_view" | "current_reason" | "user_revision" | "verification_criteria" | "verification_timeframe" | "current_status">>;
 }
 
 export interface ResearchThesis {
@@ -210,7 +219,9 @@ export interface ResearchThesis {
   verification_timeframe: string;
   current_status: ThesisStatus;
   current_reason?: string;
+  current_view?: string;
   user_revision?: string;
+  revision_history?: ThesisRevision[];
   citations: string[];
   updated_at: string;
 }
@@ -224,6 +235,8 @@ export interface ThesisDelta {
   gap_explanation: GapExplanation;
   evidence_ids: string[];
   next_steps: string;
+  round_assessment?: "supported" | "weakened" | "unresolved" | "unchanged";
+  current_view?: string;
 }
 
 export interface ResearchDocument {
@@ -236,9 +249,11 @@ export interface ResearchDocument {
   added_at: string;
   evidence_snippets: Array<{
     id: string;
-    page: number;
+    page: number | null;
     text: string;
     section?: string;
+    line_start?: number;
+    line_end?: number;
   }>;
 }
 
@@ -255,6 +270,48 @@ export interface ResearchUpdate {
   confirmed_at: string;
   confirmed_by: string;
   summary: string;
+  original_deltas?: ThesisDelta[];
+  claims?: ResearchClaim[];
+  tool_trace?: ResearchToolTrace[];
+  request_id?: string;
+  payload_hash?: string;
+}
+
+export interface ResearchClaim {
+  id: string;
+  thesis_id: string;
+  claim_text: string;
+  kind: "source" | "calculated" | "inference";
+  verification: "verified" | "unresolved" | "contradicted";
+  evidence_ids: string[];
+  quote?: string;
+  calculation_id?: string;
+  explanation: string;
+}
+
+export interface ResearchToolTrace {
+  id: string;
+  tool: string;
+  arguments: Record<string, unknown>;
+  result: unknown;
+  status: "ok" | "error";
+  duration_ms: number;
+}
+
+export interface ContinuousAnalysisResult {
+  draft_id: string;
+  project_id: string;
+  parent_version: string;
+  state_token: string;
+  version: string;
+  material_title: string;
+  material: ResearchDocument;
+  deltas: ThesisDelta[];
+  questions_update: FollowUpQuestion[];
+  overall_summary: string;
+  claims: ResearchClaim[];
+  tool_trace: ResearchToolTrace[];
+  analysis_meta: AnalysisMeta;
 }
 
 export interface ProjectState {

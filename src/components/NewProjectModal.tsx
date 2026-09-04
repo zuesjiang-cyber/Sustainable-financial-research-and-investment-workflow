@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { X, Plus, Trash2, Sparkles, BookOpen } from "lucide-react";
 import type { ResearchThesis, FollowUpQuestion } from "../types/fintrust";
 
@@ -22,6 +22,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({ isOpen, onClos
   const [name, setName] = useState("");
   const [initialNotes, setInitialNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Default 3-5 custom theses template
   const [theses, setTheses] = useState<Array<{ title: string; original_view: string; verification_criteria: string }>>([
@@ -45,6 +46,10 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({ isOpen, onClos
   const [questions, setQuestions] = useState<string[]>([
     "关注新产品在主流客户处的批量认证节奏与商业化放量拐点。",
   ]);
+
+  useEffect(() => {
+    if (isOpen) setError(null);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -78,20 +83,28 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({ isOpen, onClos
     setTicker("603160.SH");
     setName("汇顶科技 (603160.SH) - 传感器与无线音频芯片跟踪");
     setInitialNotes(
-      "【汇顶科技T0基线研判备忘】\n公司指纹识别业务份额企稳，当前重点开拓健康传感器与低功耗蓝牙芯片。2024年下半年出现触底反弹迹象，但研发转化效率与海外高端客户导入进度有待持续跟踪。"
+      "【合成演示模板：不代表真实公司披露】\n这里只是帮助预览 T0 结构的示例文本。正式使用请替换为实际研究底稿，并逐项补充可核验来源。"
     );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!company) return;
+    if (!company.trim()) {
+      setError("请填写公司名称。");
+      return;
+    }
+    if (theses.length === 0 || theses.some((thesis) => !thesis.title.trim() || !thesis.original_view.trim())) {
+      setError("至少保留一条观点，并填写观点标题与原始判断。");
+      return;
+    }
     setIsSubmitting(true);
+    setError(null);
     try {
       await onSubmit({
-        company,
-        ticker: ticker || "000000.SZ",
-        name: name || `${company} 投资观点跟踪`,
-        summary: `聚焦 ${company} 核心投资逻辑验证`,
+        company: company.trim(),
+        ticker: ticker.trim(),
+        name: name.trim() || `${company.trim()} 投资观点跟踪`,
+        summary: `聚焦 ${company.trim()} 核心投资逻辑验证`,
         initial_notes: initialNotes,
         theses: theses.map((t, idx) => ({
           id: `THESIS_${String(idx + 1).padStart(2, "0")}`,
@@ -112,31 +125,38 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({ isOpen, onClos
           })),
       });
       onClose();
+    } catch (err: any) {
+      setError(String(err?.message || err || "新建项目失败"));
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden text-slate-100 my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in duration-200">
+      <div className="bg-slate-900 border border-slate-700/80 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden text-slate-100 my-8">
         {/* Header */}
-        <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
-          <div className="flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-blue-400" />
-            <h3 className="text-base font-bold text-white">创建新研究项目（T0 基线建仓）</h3>
+        <div className="p-5 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/80">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-blue-500/15 text-blue-400 border border-blue-500/30 rounded-xl">
+              <BookOpen className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white tracking-tight">创建新买方研究项目（T0 基准建仓）</h3>
+              <p className="text-[11px] text-slate-400">建立独立的 SQLite 观点沙盒与连续评估条件</p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={handleFillSample}
-              className="text-xs text-blue-400 hover:text-blue-300 font-medium cursor-pointer"
+              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-blue-300 hover:text-blue-200 border border-slate-700 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
             >
-              填充样例
+              填入演示模板
             </button>
             <button
               onClick={onClose}
-              className="p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer"
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl cursor-pointer transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -144,6 +164,12 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({ isOpen, onClos
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+          {error && (
+            <div className="p-3 bg-rose-950/60 border border-rose-800 rounded-lg text-xs text-rose-300 flex items-start gap-2" role="alert">
+              <span className="font-semibold shrink-0">提交失败：</span>
+              <span>{error}</span>
+            </div>
+          )}
           {/* Company & Ticker */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

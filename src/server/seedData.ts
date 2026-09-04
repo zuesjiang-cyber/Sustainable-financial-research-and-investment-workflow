@@ -19,12 +19,12 @@ export function loadCaseInput(filePath: string): CaseInput | null {
 export function getInitialSbgProject(): ProjectState {
   return {
     id: "proj_sbg_300661",
-    name: "圣邦股份 (300661.SZ) - 模拟芯片研发与供应链追踪",
+    name: "【历史演示样例】圣邦股份研究状态追踪",
     company: "圣邦微电子（北京）股份有限公司",
     ticker: "300661.SZ",
     current_version: "T1",
     status: "active",
-    summary: "聚焦模拟集成电路高性能信号链与电源管理。追踪高研发投入转化为车规料号的节奏，以及自建测试基地对毛利率与供应链交付的实际支撑效果。",
+    summary: "演示数据：历史版本沿用旧项目的研究假设、摘录与模拟修正，未经本轮原件核验，时间轴不作为真实披露日期。用于展示观点、证据、用户修正如何跨轮次保存；正式使用请新建项目并提供实际材料。",
     created_at: "2024-05-10T09:00:00Z",
     updated_at: "2025-04-20T16:30:00Z",
     theses: [
@@ -54,7 +54,7 @@ export function getInitialSbgProject(): ProjectState {
         verification_timeframe: "半年度及全年度财报核验",
         current_status: "削弱",
         current_reason: "综合毛利率 50.94%，同比下降 0.52 个百分点，突破稳定区间（±0.50 pct）下限，触发削弱。",
-        user_revision: "分析师复核：毛利率下降0.52个百分点虽微弱突破阈值，但主要系测试中心投产初期固定折旧摊销及通用产品小幅降价所致，需在T2材料中密切追踪折旧消化后的拐点。",
+        user_revision: "演示用户修正：测试中心初期折旧及通用产品降价是待验证的可能原因，不能当作已证实归因。下一轮分别寻找证据并跟踪拐点。",
         citations: ["E25_P85_COST_REVENUE", "E25_P141_INVENTORY_MARGIN"],
         updated_at: "2025-04-20T16:30:00Z",
       },
@@ -293,10 +293,10 @@ export function getInitialSbgProject(): ProjectState {
 // Sample T2 Material (Qualitative Operational Update without requiring full annual accounts!)
 export const SAMPLE_T2_MATERIAL = {
   id: "DOC_T2_QUALITATIVE_BRIEF",
-  title: "圣邦股份2026年Q1运营进展与投资者关系活动记录（定性增量材料）",
+  title: "【虚构演示材料】圣邦股份 T2 运营跟踪情景",
   source_type: "qualitative_brief",
-  disclosure_date: "2026-04-15",
-  content: `【圣邦股份2026年一季度经营交流纪要】
+  disclosure_date: "",
+  content: `【虚构演示材料，不是真实公告或管理层纪要；以下数字仅用于测试】
 1. 【车规认证与客户突破】：公司多款高精度车规级专用模拟芯片（包含低噪声放大器、车身马达驱动、高压BMS监控芯片）顺利通过核心国内主机厂及国际 Tier-1 供应商的供货前 AEC-Q100 综合严格测试，本季度实现千万元级小批量出货并进入主流车型供应链目录。
 2. 【江阴测试基地利用率与效益】：江阴测试中心二期产能如期投产，芯片综合良品率提升至 99.2%，自主定制测试程序使高可靠性芯片测试周转周期再压缩约 10%，自建测试产能在第一季度已承接公司超过 45% 的量产测试任务，测试单只成本同比下降约 12%，初步显现规模经济降本效应。
 3. 【毛利率与定价走势】：虽然通用消费类料号价格依然平稳，但车规与高性能工业信号链产品占比稳步提升至 35% 以上，产品综合售价组合有所改善，初步企稳。

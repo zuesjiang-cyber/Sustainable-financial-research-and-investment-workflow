@@ -1,0 +1,669 @@
+{
+  "schemaVersion": "1.0",
+  "description": "Design-time tool catalog. Runtime injects run/workspace/company authority, resolves IDs and enforces limits.",
+  "registryRules": {
+    "gross_margin": "Two facts [revenue, cost_of_revenue], same entity/period/scope/currency.",
+    "yoy_growth": "Two facts [current, comparable_previous]; previous <= 0 yields classification, not conventional rate.",
+    "period_difference": "Two facts [current_YTD, previous_YTD], same year/scope/restatement.",
+    "margin_change": "Two calculations [current_margin, previous_margin]; display difference in percentage points.",
+    "target_gap": "One fact/calculation and thesisRevisionId+conditionPath; target resolved from criterion, never a free model literal.",
+    "read_evidence": "Nonempty spanIds OR documentId plus <= 5 consecutive pages; one form only.",
+    "submit_assessment": "Thesis/revision/inputHash and source ownership must match checkpoint."
+  },
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "find_facts",
+        "description": "Find compatible facts in this run's source pack.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "metric": {
+              "type": "string"
+            },
+            "period": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "start": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "end": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "basis": {
+                  "type": "string",
+                  "enum": [
+                    "YEAR",
+                    "YTD",
+                    "QUARTER",
+                    "INSTANT"
+                  ]
+                }
+              },
+              "required": [
+                "start",
+                "end",
+                "basis"
+              ]
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "CONSOLIDATED",
+                "PARENT",
+                "SEGMENT"
+              ]
+            },
+            "segment": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "nature": {
+              "type": "string",
+              "enum": [
+                "ACTUAL",
+                "FORECAST",
+                "GUIDANCE"
+              ]
+            }
+          },
+          "required": [
+            "metric",
+            "period",
+            "scope",
+            "nature"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "search_evidence",
+        "description": "Search allowed documents with Chinese lexical/BM25 retrieval; returns span IDs.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            },
+            "documentIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "heading": {
+              "type": "string"
+            },
+            "topK": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8,
+              "default": 5
+            }
+          },
+          "required": [
+            "query",
+            "documentIds"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_evidence",
+        "description": "Read exact source text/table context. Supply spanIds OR documentId/pageStart/pageEnd.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "spanIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "documentId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "pageStart": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "pageEnd": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "calculate_metric",
+        "description": "Execute a registered Decimal formula after dimension checks. Operand order is fixed by registry.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "formulaId": {
+              "type": "string",
+              "enum": [
+                "gross_margin",
+                "yoy_growth",
+                "period_difference",
+                "margin_change",
+                "target_gap"
+              ]
+            },
+            "operandFactIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "operandCalculationIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "thesisRevisionId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "conditionPath": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "formulaId",
+            "operandFactIds",
+            "operandCalculationIds"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "request_disclosure",
+        "description": "Request a missing official report for current company, publication <= asOf; never pass a guessed URL.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "reportPeriod": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "start": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "end": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "basis": {
+                  "type": "string",
+                  "enum": [
+                    "YEAR",
+                    "YTD",
+                    "QUARTER",
+                    "INSTANT"
+                  ]
+                }
+              },
+              "required": [
+                "start",
+                "end",
+                "basis"
+              ]
+            },
+            "reportKind": {
+              "type": "string",
+              "enum": [
+                "ANNUAL",
+                "HALF_YEAR",
+                "Q1",
+                "Q3"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "reportPeriod",
+            "reportKind",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "submit_assessment",
+        "description": "Submit candidate assessment; server validates citations and finance conditions before draft storage.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "thesisId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "thesisRevisionId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "inputHash": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "SUPPORTED",
+                "PARTIALLY_SUPPORTED",
+                "WEAKENED",
+                "UNRESOLVED"
+              ]
+            },
+            "maturity": {
+              "type": "string",
+              "enum": [
+                "NOT_DUE",
+                "IN_PROGRESS",
+                "DUE"
+              ]
+            },
+            "interimSignal": {
+              "type": "string",
+              "enum": [
+                "ABOVE",
+                "ON_TRACK",
+                "BELOW",
+                "UNKNOWN"
+              ]
+            },
+            "summary": {
+              "type": "string"
+            },
+            "factIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "calculationIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "evidenceIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "observedGap": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "evidenceIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "factIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "calculationIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "evidenceIds",
+                    "factIds",
+                    "calculationIds"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "disclosedCauses": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "evidenceIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "factIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "calculationIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "attribution": {
+                    "type": "string",
+                    "enum": [
+                      "MANAGEMENT_EXPLANATION",
+                      "DISCLOSED_FACT"
+                    ]
+                  }
+                },
+                "required": [
+                  "text",
+                  "evidenceIds",
+                  "factIds",
+                  "calculationIds",
+                  "attribution"
+                ]
+              }
+            },
+            "hypotheses": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "supportingEvidenceIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "missingEvidence": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "text",
+                  "supportingEvidenceIds",
+                  "missingEvidence"
+                ]
+              }
+            },
+            "conditions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "result": {
+                    "type": "string",
+                    "enum": [
+                      "MET",
+                      "NOT_MET",
+                      "UNKNOWN"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "evidenceIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "calculationIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                },
+                "required": [
+                  "path",
+                  "result",
+                  "reason",
+                  "evidenceIds",
+                  "calculationIds"
+                ]
+              }
+            },
+            "nextQuestions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "thesisId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "requiredEvidence": {
+                    "type": "string"
+                  },
+                  "triggerPeriod": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "start": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "end": {
+                            "type": "string",
+                            "format": "date"
+                          },
+                          "basis": {
+                            "type": "string",
+                            "enum": [
+                              "YEAR",
+                              "YTD",
+                              "QUARTER",
+                              "INSTANT"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end",
+                          "basis"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "OPEN",
+                      "ANSWERED",
+                      "DEFERRED"
+                    ]
+                  },
+                  "answer": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "text": {
+                            "type": "string"
+                          },
+                          "evidenceIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "format": "uuid"
+                            }
+                          },
+                          "factIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "format": "uuid"
+                            }
+                          },
+                          "calculationIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "format": "uuid"
+                            }
+                          }
+                        },
+                        "required": [
+                          "text",
+                          "evidenceIds",
+                          "factIds",
+                          "calculationIds"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "thesisId",
+                  "text",
+                  "requiredEvidence",
+                  "triggerPeriod",
+                  "status",
+                  "answer"
+                ]
+              }
+            },
+            "limitations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "id",
+            "thesisId",
+            "thesisRevisionId",
+            "inputHash",
+            "status",
+            "maturity",
+            "interimSignal",
+            "summary",
+            "factIds",
+            "calculationIds",
+            "evidenceIds",
+            "observedGap",
+            "disclosedCauses",
+            "hypotheses",
+            "conditions",
+            "nextQuestions",
+            "limitations"
+          ]
+        }
+      }
+    }
+  ]
+}

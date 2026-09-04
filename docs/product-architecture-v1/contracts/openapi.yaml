@@ -1,0 +1,4270 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FinTrust Report-first Product V1",
+    "version": "1.0.0-design",
+    "description": "Final product design contract; not a claim these routes are currently implemented. JSON serialization is valid YAML 1.2. All IDs are workspace scoped; cookie auth and CSRF apply to writes."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "SessionCookie": []
+    }
+  ],
+  "paths": {
+    "/v1/projects/{id}/evidence-bundle": {
+      "get": {
+        "operationId": "getEvidenceBundle",
+        "summary": "返回当前状态、指定版本或活动草稿引用的数据；version 与 runId 互斥",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "runId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Only data transitively referenced by this state/draft, not all parsed pages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceBundle"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/session": {
+      "get": {
+        "operationId": "getSession",
+        "summary": "当前用户、工作区与 CSRF token",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/projects": {
+      "get": {
+        "operationId": "listProjects",
+        "summary": "研究项目列表",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProjectSummary"
+                      }
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/projects/{id}": {
+      "get": {
+        "operationId": "getProject",
+        "summary": "当前研究与活动运行",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchProject",
+        "summary": "修改标题、归档和定期检查设置",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "archived": {
+                    "type": "boolean"
+                  },
+                  "monitorEnabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/uploads": {
+      "post": {
+        "operationId": "uploadDocument",
+        "summary": "上传研报或补充文件；uploadId 等于 document ID",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadReceipt"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "THESIS_SOURCE",
+                      "FINANCIAL_FILING",
+                      "SUPPLEMENT"
+                    ]
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "file",
+                  "role"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/documents/{id}": {
+      "get": {
+        "operationId": "getUploadedDocument",
+        "summary": "按 documentId 读取上传回执",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upload receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadReceipt"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/documents/{id}/manifest": {
+      "get": {
+        "operationId": "getParserManifest",
+        "summary": "按 documentId 读取 PDF parser manifest",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Parser manifest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["schemaVersion", "documentId", "fileSha256", "parserVersion", "pages", "blocks", "tables", "quality"],
+                  "properties": {
+                    "schemaVersion": {"type": "string"},
+                    "documentId": {"type": "string", "format": "uuid"},
+                    "fileSha256": {"type": "string"},
+                    "parserVersion": {"type": "string"},
+                    "pages": {"type": "array", "items": {"type": "object"}},
+                    "blocks": {"type": "array", "items": {"type": "object"}},
+                    "tables": {"type": "array", "items": {"type": "object"}},
+                    "quality": {"type": "object"}
+                  }
+                }
+              }
+            }
+          },
+          "default": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/v1/documents/{id}/spans": {
+      "get": {
+        "operationId": "getEvidenceSpans",
+        "summary": "按 documentId 读取解析证据片段",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Evidence spans",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {"$ref": "#/components/schemas/EvidenceSpan"}
+                }
+              }
+            }
+          },
+          "default": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/v1/runs": {
+      "post": {
+        "operationId": "createRun",
+        "summary": "创建异步研究；首次上传时自动建项目",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/runs/{id}": {
+      "get": {
+        "operationId": "getRun",
+        "summary": "运行快照与已提取观点",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDetail"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/runs/{id}/events": {
+      "get": {
+        "operationId": "streamRunEvents",
+        "summary": "持久 SSE；Last-Event-ID 支持重连",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "run.status / run.progress / run.input_required / draft.ready / run.error; data conforms to RunEvent",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/runs/{id}/input": {
+      "post": {
+        "operationId": "provideRunInput",
+        "summary": "补充公司、日期或缺失文件",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InputRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/runs/{id}/retry": {
+      "post": {
+        "operationId": "retryRun",
+        "summary": "从检查点重试，或明确追加一批分析预算",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "extendBudget": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/runs/{id}/cancel": {
+      "post": {
+        "operationId": "cancelRun",
+        "summary": "请求取消，等待 Worker 到达可取消边界",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/runs/{id}/draft": {
+      "get": {
+        "operationId": "getDraft",
+        "summary": "读取持久草稿",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Draft"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Draft revision token"
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchDraft",
+        "summary": "修改草稿并使受影响核验失效",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "ETag returned by GET/PATCH draft"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Draft"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Draft revision token"
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/runs/{id}/draft/reverify": {
+      "post": {
+        "operationId": "reverifyDraft",
+        "summary": "仅重算 stale 观点",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "ETag returned by GET/PATCH draft"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/runs/{id}/draft/confirm": {
+      "post": {
+        "operationId": "confirmDraft",
+        "summary": "幂等原子确认，不重新调用模型",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "ETag returned by GET/PATCH draft"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/runs/{id}/rebase": {
+      "post": {
+        "operationId": "rebaseRun",
+        "summary": "保留草稿修正，基于当前版本创建新 run",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/projects/{id}/filing-runs": {
+      "post": {
+        "operationId": "createFilingVerificationRun",
+        "summary": "用户上传财报后，按当前 thesis 集合生成核验草稿",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/V1FilingRunRequest"}
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "核验草稿已生成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["runId", "status", "projectId", "draft"],
+                  "properties": {
+                    "runId": {"type": "string", "format": "uuid"},
+                    "status": {"type": "string", "enum": ["AWAITING_ASSESSMENT_REVIEW"]},
+                    "projectId": {"type": "string", "format": "uuid"},
+                    "draft": {"$ref": "#/components/schemas/Draft"}
+                  }
+                }
+              }
+            }
+          },
+          "default": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/v1/projects/{id}/state": {
+      "get": {
+        "operationId": "getCurrentResearchState",
+        "summary": "读取当前已确认 Research Memory",
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Current Research State",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ResearchState"}}}
+          },
+          "default": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/v1/projects/{id}/history": {
+      "get": {
+        "operationId": "getResearchHistory",
+        "summary": "读取 T0、T1、T2 等已确认版本与 diff",
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Research history",
+            "content": {"application/json": {"schema": {"type": "array", "items": {"type": "object"}}}}
+          },
+          "default": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/v1/projects/{id}/states": {
+      "get": {
+        "operationId": "listStates",
+        "summary": "研究历史版本",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/StateSummary"
+                      }
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/projects/{id}/states/{version}": {
+      "get": {
+        "operationId": "getState",
+        "summary": "不可变已确认研究",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchState"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/evidence/{id}": {
+      "get": {
+        "operationId": "getEvidence",
+        "summary": "原文与 PDF 定位",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceSpan"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/projects/{id}/exports": {
+      "post": {
+        "operationId": "createExport",
+        "summary": "按冻结版本构建研究导出包",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "stateVersion": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "includeFiles": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "stateVersion"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportJob"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/exports/{id}": {
+      "get": {
+        "operationId": "getExport",
+        "summary": "导出任务状态",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportJob"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/documents/{id}/content": {
+      "get": {
+        "operationId": "getDocumentContent",
+        "summary": "鉴权后返回原始文件；尚未就绪返回 409",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Binary file",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Partial content; Content-Range is returned",
+            "headers": {
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/exports/{id}/content": {
+      "get": {
+        "operationId": "getExportContent",
+        "summary": "鉴权后返回原始文件；尚未就绪返回 409",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Binary file",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "healthlive",
+        "summary": "无敏感详情的健康状态",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "healthready",
+        "summary": "无敏感详情的健康状态",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "get": {
+        "operationId": "startLogin",
+        "summary": "发起 OIDC code + PKCE 登录",
+        "security": [],
+        "responses": {
+          "302": {
+            "description": "Redirect to configured issuer",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/auth/callback": {
+      "get": {
+        "operationId": "loginCallback",
+        "summary": "校验 state/nonce/code，设置服务端 session",
+        "security": [],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Set session cookie and redirect to app"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "summary": "删除当前 session",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Logged out"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "SessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "fintrust_session"
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Structured error; status code follows the error catalog in 09_API与事件契约.md",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "EvidenceBundle": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "documents",
+          "spans",
+          "facts",
+          "calculations"
+        ],
+        "properties": {
+          "documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceDocument"
+            }
+          },
+          "spans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenceSpan"
+            }
+          },
+          "facts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Fact"
+            }
+          },
+          "calculations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Calculation"
+            }
+          }
+        }
+      },
+      "Outcome": {
+        "type": "string",
+        "enum": [
+          "SUPPORTED",
+          "PARTIALLY_SUPPORTED",
+          "WEAKENED",
+          "UNRESOLVED"
+        ]
+      },
+      "RunStatus": {
+        "type": "string",
+        "enum": [
+          "QUEUED",
+          "RUNNING",
+          "WAITING_USER",
+          "AWAITING_REVIEW",
+          "COMPLETED",
+          "FAILED",
+          "CANCELLED",
+          "SUPERSEDED"
+        ]
+      },
+      "RunKind": {
+        "type": "string",
+        "enum": [
+          "INITIAL_REPORT",
+          "ADD_REPORT",
+          "REFRESH_FILINGS",
+          "REVIEW_STATE"
+        ]
+      },
+      "Phase": {
+        "type": "string",
+        "enum": [
+          "PARSE_REPORT",
+          "IDENTIFY_COMPANY",
+          "EXTRACT_THESES",
+          "DISCOVER_FILINGS",
+          "EXTRACT_FACTS",
+          "VERIFY",
+          "BUILD_DIFF"
+        ]
+      },
+      "Period": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "end": {
+            "type": "string",
+            "format": "date"
+          },
+          "basis": {
+            "type": "string",
+            "enum": [
+              "YEAR",
+              "YTD",
+              "QUARTER",
+              "INSTANT"
+            ]
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "basis"
+        ]
+      },
+      "Company": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "exchange": {
+            "type": "string",
+            "enum": [
+              "SSE",
+              "SZSE"
+            ]
+          },
+          "securityCode": {
+            "type": "string"
+          },
+          "issuerIds": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "exchange",
+          "securityCode",
+          "issuerIds",
+          "aliases"
+        ]
+      },
+      "Region": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "pageNumber": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "bbox": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "minItems": 4,
+            "maxItems": 4
+          }
+        },
+        "required": [
+          "pageNumber",
+          "bbox"
+        ]
+      },
+      "EvidenceSpan": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "regions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Region"
+            }
+          },
+          "quote": {
+            "type": "string"
+          },
+          "textHash": {
+            "type": "string"
+          },
+          "headingPath": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tableCell": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "tableId": {
+                "type": "string"
+              },
+              "row": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "col": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "tableId",
+              "row",
+              "col"
+            ]
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "NATIVE",
+              "OCR_RELIABLE",
+              "OCR_UNCERTAIN",
+              "LEGACY"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "documentId",
+          "parseId",
+          "regions",
+          "quote",
+          "textHash",
+          "headingPath",
+          "quality"
+        ]
+      },
+      "SourceDocument": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "THESIS_SOURCE",
+              "FINANCIAL_FILING",
+              "SUPPLEMENT"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "text/plain"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "companyId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "publishedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "period": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Period"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "USER_UPLOAD",
+              "OFFICIAL_DISCLOSURE",
+              "LEGACY_TEXT"
+            ]
+          },
+          "officialUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "providerId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "supersedesDocumentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "isSynthetic": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "title",
+          "fileName",
+          "mimeType",
+          "sha256",
+          "companyId",
+          "publishedAt",
+          "period",
+          "origin",
+          "officialUrl",
+          "providerId",
+          "supersedesDocumentId",
+          "isSynthetic",
+          "createdAt"
+        ]
+      },
+      "CitedStatement": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "evidenceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "factIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "calculationIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "text",
+          "evidenceIds",
+          "factIds",
+          "calculationIds"
+        ]
+      },
+      "ResearchQuestion": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "thesisId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "text": {
+            "type": "string"
+          },
+          "requiredEvidence": {
+            "type": "string"
+          },
+          "triggerPeriod": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Period"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "ANSWERED",
+              "DEFERRED"
+            ]
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CitedStatement"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "thesisId",
+          "text",
+          "requiredEvidence",
+          "triggerPeriod",
+          "status",
+          "answer"
+        ]
+      },
+      "Condition": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "COMPARE"
+              },
+              "metric": {
+                "type": "string"
+              },
+              "op": {
+                "type": "string",
+                "enum": [
+                  "GT",
+                  "GTE",
+                  "EQ",
+                  "LTE",
+                  "LT"
+                ]
+              },
+              "target": {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+              },
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "CURRENCY",
+                  "RATIO",
+                  "COUNT",
+                  "CUSTOM"
+                ]
+              },
+              "period": {
+                "$ref": "#/components/schemas/Period"
+              },
+              "scope": {
+                "type": "string",
+                "enum": [
+                  "CONSOLIDATED",
+                  "PARENT",
+                  "SEGMENT"
+                ]
+              },
+              "segment": {
+                "type": "string"
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "REPORT_EXPLICIT",
+                  "SYSTEM_PROPOSED",
+                  "USER_CONFIRMED"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "metric",
+              "op",
+              "target",
+              "unit",
+              "period",
+              "scope",
+              "origin"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "TREND"
+              },
+              "metric": {
+                "type": "string"
+              },
+              "direction": {
+                "type": "string",
+                "enum": [
+                  "UP",
+                  "DOWN",
+                  "STABLE"
+                ]
+              },
+              "period": {
+                "$ref": "#/components/schemas/Period"
+              },
+              "comparePeriod": {
+                "$ref": "#/components/schemas/Period"
+              },
+              "scope": {
+                "type": "string",
+                "enum": [
+                  "CONSOLIDATED",
+                  "PARENT",
+                  "SEGMENT"
+                ]
+              },
+              "tolerance": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "REPORT_EXPLICIT",
+                  "SYSTEM_PROPOSED",
+                  "USER_CONFIRMED"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "metric",
+              "direction",
+              "period",
+              "comparePeriod",
+              "scope",
+              "tolerance",
+              "origin"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "SEMANTIC"
+              },
+              "proposition": {
+                "type": "string"
+              },
+              "requiredEvidence": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "horizonEnd": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "REPORT_EXPLICIT",
+                  "SYSTEM_PROPOSED",
+                  "USER_CONFIRMED"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "proposition",
+              "requiredEvidence",
+              "horizonEnd",
+              "origin"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "ALL",
+                  "ANY"
+                ]
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Condition"
+                },
+                "minItems": 1
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "REPORT_EXPLICIT",
+                  "SYSTEM_PROPOSED",
+                  "USER_CONFIRMED"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "children",
+              "origin"
+            ]
+          }
+        ]
+      },
+      "ThesisRevision": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "thesisId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "groupId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "text": {
+            "type": "string"
+          },
+          "originalText": {
+            "type": "string"
+          },
+          "sourceEvidenceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "minItems": 1
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "NUMERIC_FORECAST",
+              "DIRECTIONAL",
+              "CAUSAL",
+              "QUALITATIVE",
+              "HISTORICAL"
+            ]
+          },
+          "criterion": {
+            "$ref": "#/components/schemas/Condition"
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "derivedFromThesisIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "extractionIssues": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "thesisId",
+          "revision",
+          "groupId",
+          "text",
+          "originalText",
+          "sourceEvidenceIds",
+          "type",
+          "criterion",
+          "priority",
+          "derivedFromThesisIds",
+          "extractionIssues"
+        ]
+      },
+      "ThesisAssessment": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "thesisId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "thesisRevisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inputHash": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Outcome"
+          },
+          "maturity": {
+            "type": "string",
+            "enum": [
+              "NOT_DUE",
+              "IN_PROGRESS",
+              "DUE"
+            ]
+          },
+          "interimSignal": {
+            "type": "string",
+            "enum": [
+              "ABOVE",
+              "ON_TRACK",
+              "BELOW",
+              "UNKNOWN"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "factIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "calculationIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "evidenceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "observedGap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CitedStatement"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disclosedCauses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "evidenceIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "factIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "calculationIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "attribution": {
+                  "type": "string",
+                  "enum": [
+                    "MANAGEMENT_EXPLANATION",
+                    "DISCLOSED_FACT"
+                  ]
+                }
+              },
+              "required": [
+                "text",
+                "evidenceIds",
+                "factIds",
+                "calculationIds",
+                "attribution"
+              ]
+            }
+          },
+          "hypotheses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "supportingEvidenceIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "missingEvidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "text",
+                "supportingEvidenceIds",
+                "missingEvidence"
+              ]
+            }
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "string",
+                  "enum": [
+                    "MET",
+                    "NOT_MET",
+                    "UNKNOWN"
+                  ]
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "evidenceIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "calculationIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              },
+              "required": [
+                "path",
+                "result",
+                "reason",
+                "evidenceIds",
+                "calculationIds"
+              ]
+            }
+          },
+          "nextQuestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResearchQuestion"
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "thesisId",
+          "thesisRevisionId",
+          "inputHash",
+          "status",
+          "maturity",
+          "interimSignal",
+          "summary",
+          "factIds",
+          "calculationIds",
+          "evidenceIds",
+          "observedGap",
+          "disclosedCauses",
+          "hypotheses",
+          "conditions",
+          "nextQuestions",
+          "limitations"
+        ]
+      },
+      "SourceManifest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "documents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "documentId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "sha256": {
+                  "type": "string"
+                },
+                "purpose": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "documentId",
+                "sha256",
+                "purpose"
+              ]
+            }
+          },
+          "latestCoveredPeriod": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Period"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "discoveryStatus": {
+            "type": "string",
+            "enum": [
+              "COMPLETE",
+              "PARTIAL",
+              "FAILED",
+              "NOT_REQUIRED"
+            ]
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "asOf",
+          "hash",
+          "documents",
+          "latestCoveredPeriod",
+          "checkedAt",
+          "discoveryStatus",
+          "missing"
+        ]
+      },
+      "ResearchMethod": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "focusMetrics": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "aliases": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "focusQuestions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "preferences": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "focusMetrics",
+          "aliases",
+          "focusQuestions",
+          "preferences"
+        ]
+      },
+      "StateItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "thesis": {
+            "$ref": "#/components/schemas/ThesisRevision"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "ARCHIVED"
+            ]
+          },
+          "assessment": {
+            "$ref": "#/components/schemas/ThesisAssessment"
+          },
+          "userJudgment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "thesis",
+          "lifecycle",
+          "assessment",
+          "userJudgment"
+        ]
+      },
+      "ResearchState": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "schemaVersion": {
+            "const": "1.0"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "updateId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "confirmedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StateItem"
+            }
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResearchQuestion"
+            }
+          },
+          "method": {
+            "$ref": "#/components/schemas/ResearchMethod"
+          },
+          "sourceManifest": {
+            "$ref": "#/components/schemas/SourceManifest"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "projectId",
+          "version",
+          "updateId",
+          "confirmedAt",
+          "items",
+          "questions",
+          "method",
+          "sourceManifest"
+        ]
+      },
+      "UserCorrection": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "thesisId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "THESIS_TEXT",
+              "CRITERION",
+              "USER_JUDGMENT",
+              "RESEARCH_PREFERENCE"
+            ]
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "SET",
+              "CLEAR"
+            ]
+          },
+          "before": {},
+          "after": {},
+          "reason": {
+            "type": "string"
+          },
+          "baseStateVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "thesisId",
+          "type",
+          "action",
+          "before",
+          "after",
+          "reason",
+          "baseStateVersion",
+          "createdAt"
+        ]
+      },
+      "DraftItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "thesis": {
+            "$ref": "#/components/schemas/ThesisRevision"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThesisAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proposed": {
+            "$ref": "#/components/schemas/ThesisAssessment"
+          },
+          "change": {
+            "type": "string",
+            "enum": [
+              "NEW",
+              "CHANGED",
+              "UNCHANGED",
+              "ARCHIVED"
+            ]
+          },
+          "changeReason": {
+            "type": "string"
+          },
+          "include": {
+            "type": "boolean"
+          },
+          "userJudgment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "thesis",
+          "previous",
+          "proposed",
+          "change",
+          "changeReason",
+          "include",
+          "userJudgment"
+        ]
+      },
+      "Draft": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "schemaVersion": {
+            "const": "1.0"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "baseStateVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sourceManifest": {
+            "$ref": "#/components/schemas/SourceManifest"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DraftItem"
+            }
+          },
+          "staleThesisIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResearchQuestion"
+            }
+          },
+          "corrections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserCorrection"
+            }
+          },
+          "method": {
+            "$ref": "#/components/schemas/ResearchMethod"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "id",
+          "runId",
+          "projectId",
+          "revision",
+          "baseStateVersion",
+          "sourceManifest",
+          "items",
+          "staleThesisIds",
+          "questions",
+          "corrections",
+          "method"
+        ]
+      },
+      "RequiredInput": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "COMPANY_SELECTION"
+              },
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Company"
+                }
+              },
+              "explanation": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "candidates",
+              "explanation"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "REPORT_DATE"
+              },
+              "documentId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "suggestedDate": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "quote": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "documentId",
+              "suggestedDate",
+              "quote"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "MISSING_SOURCE"
+              },
+              "missing": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "canContinueWithAvailable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "missing",
+              "canContinueWithAvailable"
+            ]
+          }
+        ]
+      },
+      "Run": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/RunKind"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Phase"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baseStateVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sourceManifest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceManifest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requiredInput": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RequiredInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "completionReason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "CONFIRMED",
+                  "NO_CHANGE"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "budget": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "inputTokens": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "outputTokens": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "modelCalls": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "toolCalls": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxInputTokens": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxOutputTokens": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxModelCalls": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxToolCalls": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "inputTokens",
+              "outputTokens",
+              "modelCalls",
+              "toolCalls",
+              "maxInputTokens",
+              "maxOutputTokens",
+              "maxModelCalls",
+              "maxToolCalls"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "kind",
+          "status",
+          "phase",
+          "baseStateVersion",
+          "asOf",
+          "sourceManifest",
+          "requiredInput",
+          "error",
+          "completionReason",
+          "cancelRequested",
+          "budget",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "Project": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Company"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currentVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "monitor": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "timezone": {
+                "const": "Asia/Shanghai"
+              },
+              "localTime": {
+                "const": "09:00"
+              },
+              "lastCheckedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "nextCheckAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "enabled",
+              "timezone",
+              "localTime",
+              "lastCheckedAt",
+              "nextCheckAt"
+            ]
+          },
+          "currentState": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "activeRun": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Run"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "company",
+          "currentVersion",
+          "archived",
+          "monitor",
+          "currentState",
+          "activeRun"
+        ]
+      },
+      "ProjectSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Company"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currentVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "activeRunId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latestCoveredPeriod": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Period"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "company",
+          "currentVersion",
+          "updatedAt",
+          "activeRunId",
+          "latestCoveredPeriod"
+        ]
+      },
+      "RunEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "run.status",
+              "run.progress",
+              "run.input_required",
+              "draft.ready",
+              "run.error"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Phase"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "completed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "message": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "runId",
+          "type",
+          "status",
+          "phase",
+          "message",
+          "createdAt"
+        ]
+      },
+      "CreateRunRequest": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "INITIAL_REPORT"
+              },
+              "uploadIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "minItems": 1
+              },
+              "asOf": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "kind",
+              "uploadIds"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "ADD_REPORT"
+              },
+              "projectId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "uploadIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "minItems": 1
+              },
+              "asOf": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "kind",
+              "projectId",
+              "uploadIds"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "REFRESH_FILINGS"
+              },
+              "projectId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "uploadIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "asOf": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "kind",
+              "projectId"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "REVIEW_STATE"
+              },
+              "projectId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "asOf": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "kind",
+              "projectId"
+            ]
+          }
+        ]
+      },
+      "DraftPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "edits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "thesisId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "include": {
+                  "type": "boolean"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "criterion": {
+                  "$ref": "#/components/schemas/Condition"
+                },
+                "userJudgment": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "thesisId"
+              ]
+            }
+          },
+          "questionEdits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "questionId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "OPEN",
+                    "ANSWERED",
+                    "DEFERRED"
+                  ]
+                }
+              },
+              "required": [
+                "questionId"
+              ]
+            }
+          },
+          "method": {
+            "$ref": "#/components/schemas/ResearchMethod"
+          }
+        },
+        "required": [
+          "edits"
+        ]
+      },
+      "ConfirmRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "baseStateVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "draftRevision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "baseStateVersion",
+          "draftRevision"
+        ]
+      },
+      "ConfirmResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "updateId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "runId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "projectId",
+          "version",
+          "updateId",
+          "runId"
+        ]
+      },
+      "ApiError": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "requestId": {
+                "type": "string"
+              },
+              "details": {}
+            },
+            "required": [
+              "code",
+              "message",
+              "retryable",
+              "requestId"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "UploadReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "uploadId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "document": {
+            "$ref": "#/components/schemas/SourceDocument"
+          },
+          "parseSummary": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "COMPLETED"
+                ]
+              },
+              "parserVersion": {
+                "type": "string"
+              },
+              "pageCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "blockCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "tableCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "spanCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "quality": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "nativeTextRatio": {
+                    "type": "number"
+                  },
+                  "hasOcrPages": {
+                    "type": "boolean"
+                  },
+                  "lowConfidencePages": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "issues": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "nativeTextRatio",
+                  "hasOcrPages",
+                  "lowConfidencePages",
+                  "issues"
+                ]
+              }
+            },
+            "required": [
+              "status",
+              "parserVersion",
+              "pageCount",
+              "blockCount",
+              "tableCount",
+              "spanCount",
+              "quality"
+            ]
+          }
+        },
+        "required": [
+          "uploadId",
+          "document"
+        ]
+      },
+      "Session": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "authMode": {
+            "type": "string",
+            "enum": [
+              "local",
+              "oidc"
+            ]
+          },
+          "csrfToken": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "workspaceId",
+          "displayName",
+          "authMode",
+          "csrfToken"
+        ]
+      },
+      "StateSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "updateId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "confirmedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "changedCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sourceCoverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Period"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "version",
+          "updateId",
+          "confirmedAt",
+          "changedCount",
+          "sourceCoverage"
+        ]
+      },
+      "ExportJob": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "stateVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "QUEUED",
+              "RUNNING",
+              "COMPLETED",
+              "FAILED"
+            ]
+          },
+          "includeFiles": {
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "stateVersion",
+          "status",
+          "includeFiles",
+          "error",
+          "createdAt"
+        ]
+      },
+      "RunDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/Run"
+          },
+          "draftAvailable": {
+            "type": "boolean"
+          },
+          "extractedTheses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThesisRevision"
+            }
+          },
+          "lastEventId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "run",
+          "draftAvailable",
+          "extractedTheses",
+          "lastEventId"
+        ]
+      },
+      "InputRequest": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "COMPANY_SELECTION"
+              },
+              "companyId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "required": [
+              "kind",
+              "companyId"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "REPORT_DATE"
+              },
+              "documentId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "date": {
+                "type": "string",
+                "format": "date"
+              }
+            },
+            "required": [
+              "kind",
+              "documentId",
+              "date"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "MISSING_SOURCE"
+              },
+              "uploadIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "continueWithAvailable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "uploadIds",
+              "continueWithAvailable"
+            ]
+          }
+        ]
+      },
+      "Fact": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "companyId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "metric": {
+            "type": "string"
+          },
+          "labelOriginal": {
+            "type": "string"
+          },
+          "segment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "period": {
+            "$ref": "#/components/schemas/Period"
+          },
+          "accountingStandard": {
+            "const": "CAS"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "CONSOLIDATED",
+              "PARENT",
+              "SEGMENT"
+            ]
+          },
+          "nature": {
+            "type": "string",
+            "enum": [
+              "ACTUAL",
+              "FORECAST",
+              "GUIDANCE"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "CURRENCY",
+              "RATIO",
+              "COUNT",
+              "CUSTOM"
+            ]
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "customUnit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "originalValue": {
+            "type": "string"
+          },
+          "originalUnit": {
+            "type": "string"
+          },
+          "scale": {
+            "type": "string",
+            "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "restatementKey": {
+            "type": "string"
+          },
+          "evidenceIds": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "extractionVersion": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "documentId",
+          "companyId",
+          "metric",
+          "labelOriginal",
+          "segment",
+          "period",
+          "accountingStandard",
+          "scope",
+          "nature",
+          "value",
+          "unit",
+          "currency",
+          "customUnit",
+          "originalValue",
+          "originalUnit",
+          "scale",
+          "publishedAt",
+          "restatementKey",
+          "evidenceIds",
+          "extractionVersion"
+        ]
+      },
+      "Calculation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "formulaId": {
+            "type": "string"
+          },
+          "formulaVersion": {
+            "type": "string"
+          },
+          "operandFactIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "operandCalculationIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "CURRENCY",
+              "RATIO",
+              "COUNT",
+              "CUSTOM"
+            ]
+          },
+          "displayUnit": {
+            "type": "string"
+          },
+          "criterionRef": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["thesisRevisionId", "conditionPath"],
+            "properties": {
+              "thesisRevisionId": {"type": "string", "format": "uuid"},
+              "conditionPath": {"type": "string"}
+            }
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "passed": {
+                  "type": "boolean"
+                },
+                "explanation": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "passed",
+                "explanation"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "formulaId",
+          "formulaVersion",
+          "operandFactIds",
+          "operandCalculationIds",
+          "result",
+          "unit",
+          "displayUnit",
+          "checks"
+        ]
+      }
+    }
+  }
+}

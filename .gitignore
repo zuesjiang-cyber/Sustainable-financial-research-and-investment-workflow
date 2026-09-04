@@ -6,3 +6,11 @@ coverage/
 *.log
 .env*
 !.env.example
+data-local/
+uploads-local/
+uploads/
+.qa-data/
+.venv/
+*.zip
+scratch/
+data/fintrust.sqlite

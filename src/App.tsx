@@ -36,12 +36,21 @@ import {
   computeFinTrustAnalysis,
   downloadFile,
 } from "./lib/fintrustEngine";
-import type { CaseInput, ProvenanceType, ProjectState, ResearchThesis, FollowUpQuestion } from "./types/fintrust";
+import type {
+  CaseInput,
+  ContinuousAnalysisResult,
+  EvidenceItem,
+  FollowUpQuestion,
+  ProjectState,
+  ProvenanceType,
+  ResearchThesis,
+} from "./types/fintrust";
 import { EvidenceDrawer } from "./components/EvidenceDrawer";
 import { ContinuousResearchZone } from "./components/ContinuousResearchZone";
 import { NewProjectModal } from "./components/NewProjectModal";
 import { NewMaterialModal } from "./components/NewMaterialModal";
-import { getInitialSbgProject } from "./server/seedData";
+import type { ConfirmResearchUpdate, MaterialAnalysisInput } from "./components/NewMaterialModal";
+import { ReportFirstContainer } from "./components/research/ReportFirstContainer";
 
 function ProvenanceBadge({ type }: { type?: ProvenanceType | string }) {
   switch (type) {
@@ -77,13 +86,18 @@ function ProvenanceBadge({ type }: { type?: ProvenanceType | string }) {
 
 export default function App() {
   // Mode selection: Continuous Research State (Round 2) vs Single Analysis & Test Bench (Round 1)
-  const [appMode, setAppMode] = useState<"continuous" | "single_test">("continuous");
+  const [appMode, setAppMode] = useState<"report_v1" | "continuous" | "single_test">("report_v1");
 
   // Continuous Research State
   const [projectsList, setProjectsList] = useState<Array<{ id: string; name: string; company: string; ticker: string; current_version: string }>>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("proj_sbg_300661");
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<ProjectState | null>(null);
   const [isLoadingProject, setIsLoadingProject] = useState(false);
+  const [projectListError, setProjectListError] = useState<string | null>(null);
+  const [projectError, setProjectError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [serverHealth, setServerHealth] = useState<{ llm_configured?: boolean; gemini_configured?: boolean } | null>(null);
+  const projectLoadGeneration = useRef(0);
 
   // Modals
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
@@ -98,56 +112,70 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Fetch project list on mount
+  // 1. Fetch project list on mount. A failed request is visible to the user;
+  // never substitute a different company's local seed project.
   const loadProjects = async () => {
     try {
       const res = await fetch("/api/projects");
-      if (res.ok) {
-        const list = await res.json();
-        setProjectsList(list);
-        if (list.length > 0) {
-          setSelectedProjectId((prev) => {
-            const match = list.find((p: any) => p.id === prev);
-            return match ? prev : list[0].id;
-          });
-        }
-      }
+      if (!res.ok) throw new Error(`项目列表加载失败（HTTP ${res.status}）`);
+      const list = await res.json();
+      if (!Array.isArray(list)) throw new Error("项目列表响应格式无效");
+      setProjectsList(list);
+      setProjectListError(null);
+      setSelectedProjectId((prev) => {
+        const match = prev && list.find((p: any) => p.id === prev);
+        return match ? prev : list[0]?.id || null;
+      });
+      return list;
     } catch (e) {
-      console.warn("Could not fetch projects list from server, using local fallback:", e);
-      // Client-side fallback if server booting
-      const sbg = getInitialSbgProject();
-      setProjectsList([{ id: sbg.id, name: sbg.name, company: sbg.company, ticker: sbg.ticker, current_version: sbg.current_version }]);
+      setProjectsList([]);
+      setSelectedProjectId(null);
+      setActiveProject(null);
+      const message = e instanceof Error ? e.message : String(e);
+      setProjectListError(message || "项目列表加载失败");
+      return [];
     }
   };
 
-  // 2. Fetch active project details
+  // 2. Fetch active project details with a generation guard so a slower
+  // response for the previous selection cannot render under the new company.
   const loadActiveProject = async (id: string) => {
+    const generation = ++projectLoadGeneration.current;
     setIsLoadingProject(true);
+    setActiveProject(null);
     try {
-      const res = await fetch(`/api/projects/${id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setActiveProject(data);
-      } else {
-        // Fallback
-        const sbg = getInitialSbgProject();
-        setActiveProject(sbg);
-      }
+      const res = await fetch(`/api/projects/${encodeURIComponent(id)}`);
+      if (!res.ok) throw new Error(`研究项目加载失败（HTTP ${res.status}）`);
+      const data = (await res.json()) as ProjectState;
+      if (generation !== projectLoadGeneration.current) return;
+      setActiveProject(data);
+      setProjectError(null);
     } catch (e) {
-      console.warn("Error fetching project details, using seed fallback:", e);
-      setActiveProject(getInitialSbgProject());
+      if (generation !== projectLoadGeneration.current) return;
+      setActiveProject(null);
+      const message = e instanceof Error ? e.message : String(e);
+      setProjectError(message || "研究项目加载失败");
     } finally {
-      setIsLoadingProject(false);
+      if (generation === projectLoadGeneration.current) setIsLoadingProject(false);
     }
   };
 
   useEffect(() => {
     loadProjects();
+    fetch("/api/health")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setServerHealth(data);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
-    if (selectedProjectId) {
-      loadActiveProject(selectedProjectId);
+    if (selectedProjectId) loadActiveProject(selectedProjectId);
+    else {
+      ++projectLoadGeneration.current;
+      setActiveProject(null);
+      setIsLoadingProject(false);
     }
   }, [selectedProjectId]);
 
@@ -159,40 +187,68 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (res.ok) {
-        const created = await res.json();
-        await loadProjects();
-        setSelectedProjectId(created.id);
-        setActiveProject(created);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `新建项目失败（HTTP ${res.status}）`);
       }
+      const created = (await res.json()) as ProjectState;
+      if (!created.id) throw new Error("新建项目响应缺少服务器项目 ID");
+      setActionError(null);
+      await loadProjects();
+      setSelectedProjectId(created.id);
+      setActiveProject(created);
     } catch (err) {
-      console.error("Failed to create project:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      setActionError(message || "新建项目失败");
+      throw err;
+    }
+  };
+
+  const handleOpenDemo = async () => {
+    try {
+      const res = await fetch("/api/demo-project", { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `演示项目创建失败（HTTP ${res.status}）`);
+      }
+      const body = await res.json();
+      const demoProject = (body.project || body) as ProjectState;
+      if (!demoProject?.id) throw new Error("演示项目响应缺少服务器项目 ID");
+      await loadProjects();
+      setSelectedProjectId(demoProject.id);
+      setActiveProject(demoProject);
+      setActionError(null);
+      setIsNewMaterialOpen(true);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
     }
   };
 
   // Handle Continuous Material Analysis Preview
-  const handleRunContinuousAnalysis = async (title: string, content: string) => {
+  const handleRunContinuousAnalysis = async (
+    input: MaterialAnalysisInput,
+    signal?: AbortSignal
+  ): Promise<ContinuousAnalysisResult> => {
     if (!activeProject) throw new Error("No active project");
-    const res = await fetch(`/api/projects/${activeProject.id}/analyze-material`, {
+    const projectId = activeProject.id;
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/analyze-material`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title,
-        content,
-        snippets: activeProject.documents.flatMap((d) => d.evidence_snippets || []),
-      }),
+      signal,
+      body: JSON.stringify(input),
     });
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || "Analysis failed");
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `连续分析失败（HTTP ${res.status}）`);
     }
-    return res.json();
+    return (await res.json()) as ContinuousAnalysisResult;
   };
 
   // Handle Applying & Saving Update to SQLite
-  const handleApplyUpdate = async (data: any) => {
+  const handleApplyUpdate = async (data: ConfirmResearchUpdate) => {
     if (!activeProject) return;
-    const res = await fetch(`/api/projects/${activeProject.id}/update`, {
+    const projectId = activeProject.id;
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/update`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -202,7 +258,8 @@ export default function App() {
       throw new Error(errBody.error || `保存更新失败 (HTTP ${res.status})`);
     }
     const updated = await res.json();
-    setActiveProject(updated);
+    if (selectedProjectId === projectId) setActiveProject(updated);
+    setActionError(null);
     await loadProjects();
   };
 
@@ -215,11 +272,16 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       });
-      if (res.ok) {
-        await loadActiveProject(activeProject.id);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `保存观点失败（HTTP ${res.status}）`);
       }
+      await loadActiveProject(activeProject.id);
+      setActionError(null);
     } catch (err) {
-      console.error("Failed to update thesis:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      setActionError(message || "保存观点失败");
+      throw err;
     }
   };
 
@@ -232,12 +294,17 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question_text: text, status: "未解决" }),
       });
-      if (res.ok) {
-        const updated = await res.json();
-        setActiveProject(updated);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `新增疑问失败（HTTP ${res.status}）`);
       }
+      const updated = await res.json();
+      setActiveProject(updated);
+      setActionError(null);
     } catch (err) {
-      console.error("Failed to add question:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      setActionError(message || "新增疑问失败");
+      throw err;
     }
   };
 
@@ -250,12 +317,17 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(question),
       });
-      if (res.ok) {
-        const updated = await res.json();
-        setActiveProject(updated);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `保存疑问失败（HTTP ${res.status}）`);
       }
+      const updated = await res.json();
+      setActiveProject(updated);
+      setActionError(null);
     } catch (err) {
-      console.error("Failed to update question:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      setActionError(message || "保存疑问失败");
+      throw err;
     }
   };
 
@@ -266,12 +338,17 @@ export default function App() {
       const res = await fetch(`/api/projects/${activeProject.id}/questions/${questionId}`, {
         method: "DELETE",
       });
-      if (res.ok) {
-        const updated = await res.json();
-        setActiveProject(updated);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `删除疑问失败（HTTP ${res.status}）`);
       }
+      const updated = await res.json();
+      setActiveProject(updated);
+      setActionError(null);
     } catch (err) {
-      console.error("Failed to delete question:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      setActionError(message || "删除疑问失败");
+      throw err;
     }
   };
 
@@ -322,12 +399,18 @@ export default function App() {
   const handleResetDefault = async () => {
     if (!confirm("确定要将数据库重置为官方默认演示状态吗？这会恢复圣邦股份 T0/T1 状态。")) return;
     try {
-      await fetch("/api/projects/reset-default", { method: "POST" });
+      const res = await fetch("/api/projects/reset-default", { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `重置演示项目失败（HTTP ${res.status}）`);
+      }
+      const body = await res.json().catch(() => ({}));
       await loadProjects();
-      setSelectedProjectId("proj_sbg_01");
-      await loadActiveProject("proj_sbg_01");
+      const resetProject = body.project as ProjectState | undefined;
+      if (resetProject?.id) setSelectedProjectId(resetProject.id);
+      setActionError(null);
     } catch (err) {
-      console.error("Reset failed:", err);
+      setActionError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -366,36 +449,31 @@ export default function App() {
   const cfMetric = metrics.operating_cash_flow_fy2025;
   const rdMetric = metrics.rd_expense_ratio_fy2025;
 
-  // Merge continuous research evidence snippets with showcase evidence
-  const mergedEvidenceList = useMemo(() => {
-    const list = [...(currentCaseInput.evidence || [])];
-    if (activeProject && activeProject.documents) {
-      for (const doc of activeProject.documents) {
-        if (doc.evidence_snippets) {
-          for (const snip of doc.evidence_snippets) {
-            if (!list.some((e) => e.evidence_id === snip.id)) {
-              list.push({
-                evidence_id: snip.id,
-                document: doc.title,
-                page: snip.page || 1,
-                period: doc.disclosure_date || "Continuous Update",
-                image: "sbg_fy2025_p13.png",
-                snippet: snip.text,
-              });
-            }
-          }
-        }
-      }
-    }
-    return list;
-  }, [currentCaseInput.evidence, activeProject]);
+  // Keep single-case fixtures and continuous-project evidence in separate
+  // namespaces. Continuous snippets have no fabricated page-one image.
+  const continuousEvidenceList = useMemo<EvidenceItem[]>(() => {
+    if (!activeProject) return [];
+    return activeProject.documents.flatMap((doc) =>
+      (doc.evidence_snippets || []).map((snippet) => ({
+        evidence_id: snippet.id,
+        document: doc.title,
+        period: doc.disclosure_date || "期间未提供",
+        page: snippet.page ?? null,
+        snippet: snippet.text,
+        ...(snippet.line_start == null ? {} : { line_start: snippet.line_start }),
+        ...(snippet.line_end == null ? {} : { line_end: snippet.line_end }),
+      }))
+    );
+  }, [activeProject]);
+
+  const evidenceList = appMode === "continuous" ? continuousEvidenceList : currentCaseInput.evidence || [];
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
       {/* Evidence Drawer Overlay (Truthful disclaimers + Verbatim transcripts) */}
       <EvidenceDrawer
         evidenceId={selectedEvidenceId}
-        evidenceList={mergedEvidenceList}
+        evidenceList={evidenceList}
         onClose={() => setSelectedEvidenceId(null)}
         onSelectEvidence={(id) => setSelectedEvidenceId(id)}
       />
@@ -415,6 +493,7 @@ export default function App() {
           onClose={() => setIsNewMaterialOpen(false)}
           onRunAnalysis={handleRunContinuousAnalysis}
           onApplyUpdate={handleApplyUpdate}
+          onSelectEvidence={(id) => setSelectedEvidenceId(id)}
         />
       )}
 
@@ -428,16 +507,16 @@ export default function App() {
       />
 
       {/* Top Header */}
-      <header className="border-b border-slate-800 bg-slate-950/90 backdrop-blur sticky top-0 z-40">
+      <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-600/20 border border-blue-500/40 rounded-xl text-blue-400">
+            <div className="p-2.5 bg-gradient-to-br from-blue-500/20 via-indigo-500/20 to-cyan-500/10 border border-blue-500/30 rounded-2xl text-blue-400 shadow-md shadow-blue-500/10">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-base tracking-tight text-white">FinTrust Research Core</span>
-                <span className="text-[10px] font-mono uppercase bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded border border-blue-500/40">
+                <span className="text-[10px] font-mono uppercase bg-blue-500/15 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30 font-semibold tracking-wide">
                   SQLite 持久记忆版
                 </span>
               </div>
@@ -448,30 +527,42 @@ export default function App() {
           </div>
 
           {/* Center: System Mode Toggle */}
-          <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
+          <div className="flex items-center bg-slate-900/90 p-1 rounded-2xl border border-slate-800/90 shadow-inner text-xs">
+            <button
+              onClick={() => setAppMode("report_v1")}
+              className={`px-3.5 py-1.5 rounded-xl font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                appMode === "report_v1"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-600/25"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              id="mode-report-v1-btn"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-blue-300" />
+              研报观点核验与持续研究 (V1)
+            </button>
             <button
               onClick={() => setAppMode("continuous")}
-              className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                 appMode === "continuous"
-                  ? "bg-blue-600 text-white shadow-sm"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-600/25"
                   : "text-slate-400 hover:text-slate-200"
               }`}
               id="mode-continuous-btn"
             >
               <History className="w-3.5 h-3.5" />
-              持续研究跟踪 (T0 → T1 → T2)
+              多轮跟踪
             </button>
             <button
               onClick={() => setAppMode("single_test")}
-              className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                 appMode === "single_test"
-                  ? "bg-blue-600 text-white shadow-sm"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-600/25"
                   : "text-slate-400 hover:text-slate-200"
               }`}
               id="mode-single-test-btn"
             >
               <Terminal className="w-3.5 h-3.5" />
-              单次分析与不变量测试台
+              单次测试台
             </button>
           </div>
 
@@ -481,7 +572,7 @@ export default function App() {
               <>
                 <button
                   onClick={() => setIsNewProjectOpen(true)}
-                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1 cursor-pointer transition-colors border border-slate-700"
+                  className="px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all border border-slate-700 shadow-xs"
                   title="新建买方研究基线"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -489,8 +580,17 @@ export default function App() {
                 </button>
 
                 <button
+                  onClick={handleOpenDemo}
+                  className="px-3 py-1.5 bg-gradient-to-r from-indigo-600/30 to-purple-600/30 hover:from-indigo-600/50 hover:to-purple-600/50 text-indigo-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all border border-indigo-500/40 shadow-xs"
+                  title="创建虚构演示项目并体验完整连续研究链路"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  体验完整 Demo
+                </button>
+
+                <button
                   onClick={handleExportSnapshot}
-                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer border border-slate-700"
+                  className="p-2 bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs cursor-pointer border border-slate-700 transition-colors shadow-xs"
                   title="导出 SQLite 项目快照 JSON"
                 >
                   <Download className="w-4 h-4" />
@@ -498,7 +598,7 @@ export default function App() {
 
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer border border-slate-700"
+                  className="p-2 bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs cursor-pointer border border-slate-700 transition-colors shadow-xs"
                   title="导入项目快照 JSON"
                 >
                   <Upload className="w-4 h-4" />
@@ -506,7 +606,7 @@ export default function App() {
 
                 <button
                   onClick={handleResetDefault}
-                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-amber-300 rounded-lg text-xs cursor-pointer border border-slate-700"
+                  className="p-2 bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-amber-300 rounded-xl text-xs cursor-pointer border border-slate-700 transition-colors shadow-xs"
                   title="重置数据库到默认状态"
                 >
                   <RotateCcw className="w-4 h-4" />
@@ -518,14 +618,14 @@ export default function App() {
               <>
                 <button
                   onClick={handleDownloadJSON}
-                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1 cursor-pointer transition-colors border border-slate-700"
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors border border-slate-700"
                 >
                   <Download className="w-3.5 h-3.5" />
                   JSON
                 </button>
                 <button
                   onClick={handleDownloadMD}
-                  className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-md shadow-blue-600/20"
                 >
                   <FileText className="w-3.5 h-3.5" />
                   导出研报
@@ -538,32 +638,35 @@ export default function App() {
 
       {/* Sub-Header: Project Selector Bar (When in Continuous Mode) */}
       {appMode === "continuous" && (
-        <div className="bg-slate-950/60 border-b border-slate-800/80 px-4 sm:px-6 lg:px-8 py-2.5">
+        <div className="bg-slate-950/70 backdrop-blur-md border-b border-slate-800/80 px-4 sm:px-6 lg:px-8 py-3">
           <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2">
-              <FolderKanban className="w-4 h-4 text-blue-400" />
-              <span className="text-slate-400 font-medium">当前研究标的：</span>
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20">
+                <FolderKanban className="w-4 h-4" />
+              </div>
+              <span className="text-slate-400 font-semibold">跟踪研究标的：</span>
               <select
-                value={selectedProjectId}
+                value={selectedProjectId || ""}
                 onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-white font-semibold focus:outline-none focus:border-blue-500 cursor-pointer"
+                className="bg-slate-900/90 border border-slate-700/80 rounded-xl px-3 py-1.5 text-white font-semibold focus:outline-none focus:border-blue-500 cursor-pointer text-xs shadow-sm hover:border-slate-600 transition-colors"
               >
                 {projectsList.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.company} ({p.ticker}) · {p.current_version}
+                    {p.company} ({p.ticker}) · 当前版本 {p.current_version}
                   </option>
                 ))}
               </select>
             </div>
 
             <div className="flex items-center gap-3 text-[11px] text-slate-400 font-mono">
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1.5 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <Database className="w-3.5 h-3.5 text-emerald-400" />
-                SQLite: project_memory.db (已持久化)
+                <span>SQLite: fintrust.sqlite (已持久化)</span>
               </span>
-              <span>•</span>
-              <span className="text-purple-400">
-                LLM: {process.env.GEMINI_API_KEY ? "Gemini 3.8 Flash (Active)" : "语义规则对账 (Fail-Closed Mode)"}
+              <span className="flex items-center gap-1.5 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800 text-purple-300">
+                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                <span>LLM: {serverHealth?.gemini_configured ? "Gemini 3.8 Flash (Active)" : serverHealth?.llm_configured ? "兼容模型 (Active)" : "语义规则对账 (Fail-Closed Mode)"}</span>
               </span>
             </div>
           </div>
@@ -572,15 +675,40 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {(projectListError || projectError || actionError) && (
+          <div className="rounded-xl border border-rose-800/80 bg-rose-950/45 px-4 py-3 text-xs text-rose-200 flex items-start justify-between gap-3" role="alert">
+            <div className="flex items-start gap-2"><AlertTriangle className="w-4 h-4 text-rose-300 shrink-0 mt-0.5" /><span>{projectListError || projectError || actionError}</span></div>
+            <button type="button" onClick={() => { setProjectListError(null); setProjectError(null); setActionError(null); }} className="text-rose-300 hover:text-white cursor-pointer shrink-0">关闭</button>
+          </div>
+        )}
+        {appMode === "continuous" && activeProject?.id === "proj_sbg_300661" && (
+          <div className="rounded-xl border border-amber-800/80 bg-amber-950/35 px-4 py-2.5 text-xs text-amber-200 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-300 shrink-0" />
+            历史演示数据，未经本轮原件核验；正式使用请新建项目并提供实际材料。
+          </div>
+        )}
+        {/* ==================================================================== */}
+        {/* VIEW 0: FINTRUST REPORT-FIRST PRODUCT V1                             */}
+        {/* ==================================================================== */}
+        {appMode === "report_v1" && <ReportFirstContainer />}
+
         {/* ==================================================================== */}
         {/* VIEW 1: CONTINUOUS RESEARCH STATE (Round 2: T0 -> T1 -> T2)           */}
         {/* ==================================================================== */}
         {appMode === "continuous" && (
           <div>
-            {isLoadingProject || !activeProject ? (
+            {isLoadingProject ? (
               <div className="p-12 text-center text-slate-400">
                 <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-blue-500" />
                 <p className="text-sm">正在加载研究项目状态与演进历史...</p>
+              </div>
+            ) : !activeProject ? (
+              <div className="p-12 text-center text-slate-400 bg-slate-900 border border-slate-800 rounded-xl">
+                <p className="text-sm">{projectsList.length === 0 ? "暂无可用研究项目。请新建项目后开始。" : "未加载到当前研究项目。"}</p>
+                <div className="flex items-center justify-center gap-2 mt-4">
+                  <button type="button" onClick={() => loadProjects()} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-200 cursor-pointer">重新加载项目列表</button>
+                  <button type="button" onClick={() => setIsNewProjectOpen(true)} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs text-white cursor-pointer">新建项目</button>
+                </div>
               </div>
             ) : (
               <ContinuousResearchZone
@@ -753,6 +881,7 @@ export default function App() {
                       label: "营业收入 (FY2025)",
                       val: revMetric ? `${(Number(revMetric.current_value) / 1e8).toFixed(2)} 亿元` : "--",
                       sub: revMetric?.delta_value ? `同比 ${revMetric.delta_value}%` : "同比不可比",
+                      isPositive: true,
                       formula: "Decimal 重算: (本期-上期)/上期",
                       evidence: "E25_P13_SUMMARY",
                     },
@@ -760,6 +889,7 @@ export default function App() {
                       label: "综合毛利率",
                       val: gmMetric?.current_value ? `${gmMetric.current_value}%` : "--",
                       sub: gmMetric?.delta_value ? `同比变动 ${gmMetric.delta_value} pct` : "--",
+                      isPositive: false,
                       formula: "Decimal 重算: (收入-成本)/收入",
                       evidence: "E25_P85_COST_REVENUE",
                     },
@@ -767,6 +897,7 @@ export default function App() {
                       label: "经营活动现金流净额",
                       val: cfMetric ? `${(Number(cfMetric.current_value) / 1e8).toFixed(2)} 亿元` : "--",
                       sub: cfMetric?.delta_value ? `同比 ${cfMetric.delta_value}%` : "--",
+                      isPositive: false,
                       formula: "精确计算: (466M - 549M)/549M",
                       evidence: "E25_P89_CASH_FLOW",
                     },
@@ -774,19 +905,43 @@ export default function App() {
                       label: "研发费用率",
                       val: rdMetric?.current_value ? `${rdMetric.current_value}%` : "--",
                       sub: rdMetric?.description || "高研发投入支撑料号扩充",
+                      isPositive: true,
                       formula: "精确计算: 研发费 / 营业收入",
                       evidence: "E25_P85_COST_REVENUE",
                     },
                   ].map((m, idx) => (
-                    <div key={idx} className="bg-slate-800/80 border border-slate-700 rounded-xl p-4 space-y-2">
-                      <div className="text-xs text-slate-400 font-medium">{m.label}</div>
-                      <div className="text-xl font-mono font-bold text-white tracking-tight">{m.val}</div>
-                      <div className="text-xs font-mono text-emerald-400">{m.sub}</div>
-                      <div className="pt-2 border-t border-slate-700/60 text-[11px] text-slate-400 font-mono flex items-center justify-between">
-                        <span>{m.formula}</span>
+                    <div
+                      key={idx}
+                      className="bg-slate-900/80 hover:bg-slate-800/80 border border-slate-800/90 hover:border-slate-700 rounded-2xl p-5 space-y-3 shadow-md transition-all group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-400 font-semibold">{m.label}</span>
+                        <div className="p-1.5 rounded-lg bg-slate-800/80 text-slate-400 group-hover:text-blue-400 transition-colors">
+                          <Calculator className="w-3.5 h-3.5" />
+                        </div>
+                      </div>
+                      <div className="text-2xl font-mono font-bold text-white tracking-tight">{m.val}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono font-semibold ${
+                            m.isPositive
+                              ? "bg-emerald-950/80 text-emerald-300 border border-emerald-800/60"
+                              : "bg-rose-950/80 text-rose-300 border border-rose-800/60"
+                          }`}
+                        >
+                          {m.isPositive ? (
+                            <TrendingUp className="w-3 h-3 text-emerald-400" />
+                          ) : (
+                            <TrendingDown className="w-3 h-3 text-rose-400" />
+                          )}
+                          {m.sub}
+                        </span>
+                      </div>
+                      <div className="pt-3 border-t border-slate-800/80 text-[11px] text-slate-400 font-mono flex items-center justify-between">
+                        <span className="text-slate-500 truncate max-w-[150px]">{m.formula}</span>
                         <button
                           onClick={() => setSelectedEvidenceId(m.evidence)}
-                          className="text-blue-400 hover:underline cursor-pointer"
+                          className="text-blue-400 hover:text-blue-300 hover:underline cursor-pointer text-right shrink-0"
                         >
                           {m.evidence}
                         </button>
@@ -801,7 +956,7 @@ export default function App() {
             {activeTab === "narrative" && (
               <div className="space-y-4 animate-in fade-in duration-200">
                 {narrative_deltas.map((n) => (
-                  <div key={n.label} className="bg-slate-800/80 border border-slate-700 rounded-xl p-5 space-y-3">
+                  <div key={n.label} className="bg-slate-900/80 border border-slate-800/90 rounded-2xl p-5 space-y-3 shadow-md">
                     <div className="flex items-center justify-between">
                       <h4 className="text-sm font-bold text-white flex items-center gap-2">
                         <Sparkles className="w-4 h-4 text-purple-400" />
@@ -811,12 +966,12 @@ export default function App() {
                         {n.source_tag}
                       </span>
                     </div>
-                    <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs">
+                    <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/80 text-xs">
                       <span className="text-slate-400 block mb-1 font-semibold">披露演进：</span>
                       <p className="text-slate-300 leading-relaxed font-sans">{n.summary}</p>
                     </div>
-                    <div className="p-3 bg-blue-950/30 rounded-lg border border-blue-900/50 text-xs text-blue-200">
-                      <strong>AI 对比归因：</strong> {n.relevance}
+                    <div className="p-3.5 bg-blue-950/30 rounded-xl border border-blue-900/50 text-xs text-blue-200 leading-relaxed">
+                      <strong className="text-blue-300">AI 对比归因：</strong> {n.relevance}
                     </div>
                   </div>
                 ))}
@@ -826,43 +981,61 @@ export default function App() {
             {/* TAB 4: CLAIMS */}
             {activeTab === "claims" && (
               <div className="space-y-4 animate-in fade-in duration-200">
-                <div className="text-xs text-slate-400 flex items-center justify-between">
-                  <span>对草稿研报中的 7 条核心事实主张进行真实底稿拦截审核：</span>
-                  <span className="font-mono">
-                    拦截率: <strong className="text-rose-400">{mismatchClaimsCount}/7</strong>
+                <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-400 flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-blue-400" />
+                    对草稿研报中的 7 条核心事实主张进行真实底稿拦截审核（零幻觉硬门禁）：
+                  </span>
+                  <span className="font-mono bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+                    偏差拦截率: <strong className="text-rose-400">{mismatchClaimsCount}/7</strong>
                   </span>
                 </div>
                 <div className="space-y-3">
-                  {claim_audits.map((c) => (
-                    <div
-                      key={c.claim_id}
-                      className={`p-4 rounded-xl border transition-all ${
-                        c.status === "VERIFIED"
-                          ? "bg-slate-800/80 border-slate-700"
-                          : "bg-rose-950/30 border-rose-800/70 shadow-sm"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-slate-400">{c.claim_id}</span>
-                          <span className="text-sm font-medium text-white">{c.claim_text}</span>
+                  {claim_audits.map((c) => {
+                    const isVerified = c.status === "VERIFIED";
+                    return (
+                      <div
+                        key={c.claim_id}
+                        className={`p-4 md:p-5 rounded-2xl border transition-all ${
+                          isVerified
+                            ? "bg-slate-900/80 border-slate-800/90 border-l-4 border-l-emerald-500 shadow-sm"
+                            : "bg-rose-950/20 border-rose-800/60 border-l-4 border-l-rose-500 shadow-md shadow-rose-950/20"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2.5">
+                            <span className="font-mono text-xs font-bold text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800 shrink-0">
+                              {c.claim_id}
+                            </span>
+                            <span className="text-sm font-semibold text-white leading-snug">{c.claim_text}</span>
+                          </div>
+                          {isVerified ? (
+                            <span className="px-2.5 py-1 bg-emerald-950 text-emerald-300 border border-emerald-800/80 rounded-full text-xs font-semibold shrink-0 flex items-center gap-1.5 shadow-xs">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> 已核验通过
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 bg-rose-950 text-rose-200 border border-rose-700/80 rounded-full text-xs font-semibold shrink-0 flex items-center gap-1.5 shadow-xs badge-glow-rose">
+                              <XCircle className="w-3.5 h-3.5 text-rose-400" /> 拦截偏差 (MISMATCH)
+                            </span>
+                          )}
                         </div>
-                        {c.status === "VERIFIED" ? (
-                          <span className="px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded text-xs font-semibold shrink-0 flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> 已核验通过
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 bg-rose-950 text-rose-300 border border-rose-700 rounded text-xs font-semibold shrink-0 flex items-center gap-1">
-                            <XCircle className="w-3.5 h-3.5" /> 拦截偏差 (MISMATCH)
-                          </span>
-                        )}
+                        <div className="mt-3 text-xs text-slate-300 space-y-1.5 pl-9">
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-400">法定核验真实值：</span>
+                            <span className="font-mono text-emerald-300 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/50 font-semibold">
+                              {c.recalculated_truth}
+                            </span>
+                          </div>
+                          <div className="text-slate-400 leading-relaxed">
+                            <span className="text-slate-500">审计说明：</span>
+                            <span className={isVerified ? "text-slate-300" : "text-rose-200 font-medium"}>
+                              {c.explanation}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="mt-2 text-xs text-slate-300 space-y-1">
-                        <div><span className="text-slate-500">法定核验值：</span><span className="font-mono text-emerald-400">{c.recalculated_truth}</span></div>
-                        <div><span className="text-slate-500">审计说明：</span><span>{c.explanation}</span></div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -871,17 +1044,31 @@ export default function App() {
             {activeTab === "brief" && (
               <div className="space-y-4 animate-in fade-in duration-200">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-400">已剔除所有草稿幻觉并由真实计算重写后的最终研报：</span>
+                  <span className="text-xs text-slate-400">
+                    已由 Decimal 真实计算自动重写并拦截草稿偏差后的发布版研报：
+                  </span>
                   <button
                     onClick={handleCopySummary}
-                    className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                    className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors border border-slate-700 shadow-xs"
                   >
                     {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                     {copied ? "已复制到剪贴板" : "复制 Markdown"}
                   </button>
                 </div>
-                <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 font-mono text-xs text-slate-200 whitespace-pre-wrap leading-relaxed shadow-inner">
-                  {published_summary}
+                {/* Mac Terminal Card */}
+                <div className="rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl">
+                  <div className="bg-slate-900/90 px-4 py-2.5 border-b border-slate-800/80 flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="w-3 h-3 rounded-full bg-rose-500/80 inline-block"></span>
+                      <span className="w-3 h-3 rounded-full bg-amber-500/80 inline-block"></span>
+                      <span className="w-3 h-3 rounded-full bg-emerald-500/80 inline-block"></span>
+                      <span className="text-[11px] font-mono text-slate-400 ml-2 font-medium">FinTrust_Research_Report.md</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/60">VERIFIED CLEAN</span>
+                  </div>
+                  <div className="p-6 font-mono text-xs text-slate-200 whitespace-pre-wrap leading-relaxed">
+                    {published_summary}
+                  </div>
                 </div>
               </div>
             )}

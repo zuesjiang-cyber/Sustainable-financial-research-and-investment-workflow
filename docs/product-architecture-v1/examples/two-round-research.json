@@ -1,0 +1,912 @@
+{
+  "description": "完全虚构的设计契约样例。PDF、哈希及页码均为结构示意，不可用于证明真实解析/自动获取/模型质量。演示同一观点、未到期判断、用户修正和问题闭环。",
+  "isSynthetic": true,
+  "company": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "name": "虚构示例公司（非真实披露）",
+    "exchange": "SSE",
+    "securityCode": "DEMO_ONLY",
+    "issuerIds": {
+      "fixture": "synthetic-001"
+    },
+    "aliases": []
+  },
+  "projectId": "00000000-0000-4000-8000-000000000002",
+  "evidenceBundle": {
+    "documents": [
+      {
+        "id": "00000000-0000-4000-8000-000000000010",
+        "role": "THESIS_SOURCE",
+        "title": "示例研报：2025 年毛利率有望达到 30%",
+        "fileName": "synthetic-report.pdf",
+        "mimeType": "application/pdf",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "companyId": "00000000-0000-4000-8000-000000000001",
+        "publishedAt": "2025-07-01T01:00:00Z",
+        "period": null,
+        "origin": "USER_UPLOAD",
+        "officialUrl": null,
+        "providerId": null,
+        "supersedesDocumentId": null,
+        "isSynthetic": true,
+        "createdAt": "2025-11-01T01:00:00Z"
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000011",
+        "role": "FINANCIAL_FILING",
+        "title": "虚构 2025 三季报",
+        "fileName": "synthetic-q3.pdf",
+        "mimeType": "application/pdf",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "companyId": "00000000-0000-4000-8000-000000000001",
+        "publishedAt": "2025-10-30T10:00:00Z",
+        "period": {
+          "start": "2025-01-01",
+          "end": "2025-09-30",
+          "basis": "YTD"
+        },
+        "origin": "USER_UPLOAD",
+        "officialUrl": null,
+        "providerId": null,
+        "supersedesDocumentId": null,
+        "isSynthetic": true,
+        "createdAt": "2025-11-01T01:00:00Z"
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000012",
+        "role": "FINANCIAL_FILING",
+        "title": "虚构 2025 年报",
+        "fileName": "synthetic-annual.pdf",
+        "mimeType": "application/pdf",
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "companyId": "00000000-0000-4000-8000-000000000001",
+        "publishedAt": "2026-04-20T10:00:00Z",
+        "period": {
+          "start": "2025-01-01",
+          "end": "2025-12-31",
+          "basis": "YEAR"
+        },
+        "origin": "USER_UPLOAD",
+        "officialUrl": null,
+        "providerId": null,
+        "supersedesDocumentId": null,
+        "isSynthetic": true,
+        "createdAt": "2026-04-21T01:00:00Z"
+      }
+    ],
+    "spans": [
+      {
+        "id": "00000000-0000-4000-8000-000000000020",
+        "documentId": "00000000-0000-4000-8000-000000000010",
+        "parseId": "00000000-0000-4000-8000-000000000030",
+        "regions": [
+          {
+            "pageNumber": 2,
+            "bbox": [
+              0.1,
+              0.2,
+              0.9,
+              0.3
+            ]
+          }
+        ],
+        "quote": "预计 2025 年全年合并口径毛利率达到 30%。",
+        "textHash": "fixture-quote-20",
+        "headingPath": [
+          "投资观点"
+        ],
+        "quality": "NATIVE"
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000021",
+        "documentId": "00000000-0000-4000-8000-000000000011",
+        "parseId": "00000000-0000-4000-8000-000000000031",
+        "regions": [
+          {
+            "pageNumber": 8,
+            "bbox": [
+              0.1,
+              0.1,
+              0.9,
+              0.8
+            ]
+          }
+        ],
+        "quote": "合并利润表，2025 年 1—9 月，单位：元；营业收入 10,000；营业成本 7,100。",
+        "textHash": "fixture-quote-21",
+        "headingPath": [
+          "合并利润表"
+        ],
+        "quality": "NATIVE"
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000022",
+        "documentId": "00000000-0000-4000-8000-000000000012",
+        "parseId": "00000000-0000-4000-8000-000000000032",
+        "regions": [
+          {
+            "pageNumber": 50,
+            "bbox": [
+              0.1,
+              0.1,
+              0.9,
+              0.8
+            ]
+          }
+        ],
+        "quote": "合并利润表，2025 年度，单位：元；营业收入 14,000；营业成本 9,660。",
+        "textHash": "fixture-quote-22",
+        "headingPath": [
+          "合并利润表"
+        ],
+        "quality": "NATIVE"
+      }
+    ],
+    "facts": [
+      {
+        "id": "00000000-0000-4000-8000-000000000040",
+        "documentId": "00000000-0000-4000-8000-000000000011",
+        "companyId": "00000000-0000-4000-8000-000000000001",
+        "metric": "revenue",
+        "labelOriginal": "营业收入",
+        "segment": null,
+        "period": {
+          "start": "2025-01-01",
+          "end": "2025-09-30",
+          "basis": "YTD"
+        },
+        "accountingStandard": "CAS",
+        "scope": "CONSOLIDATED",
+        "nature": "ACTUAL",
+        "value": "10000",
+        "unit": "CURRENCY",
+        "currency": "CNY",
+        "customUnit": null,
+        "originalValue": "10000",
+        "originalUnit": "元",
+        "scale": "1",
+        "publishedAt": "2025-10-30T10:00:00Z",
+        "restatementKey": "fixture-original",
+        "evidenceIds": [
+          "00000000-0000-4000-8000-000000000021"
+        ],
+        "extractionVersion": "fixture-1"
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000041",
+        "documentId": "00000000-0000-4000-8000-000000000011",
+        "companyId": "00000000-0000-4000-8000-000000000001",
+        "metric": "cost_of_revenue",
+        "labelOriginal": "营业成本",
+        "segment": null,
+        "period": {
+          "start": "2025-01-01",
+          "end": "2025-09-30",
+          "basis": "YTD"
+        },
+        "accountingStandard": "CAS",
+        "scope": "CONSOLIDATED",
+        "nature": "ACTUAL",
+        "value": "7100",
+        "unit": "CURRENCY",
+        "currency": "CNY",
+        "customUnit": null,
+        "originalValue": "7100",
+        "originalUnit": "元",
+        "scale": "1",
+        "publishedAt": "2025-10-30T10:00:00Z",
+        "restatementKey": "fixture-original",
+        "evidenceIds": [
+          "00000000-0000-4000-8000-000000000021"
+        ],
+        "extractionVersion": "fixture-1"
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000042",
+        "documentId": "00000000-0000-4000-8000-000000000012",
+        "companyId": "00000000-0000-4000-8000-000000000001",
+        "metric": "revenue",
+        "labelOriginal": "营业收入",
+        "segment": null,
+        "period": {
+          "start": "2025-01-01",
+          "end": "2025-12-31",
+          "basis": "YEAR"
+        },
+        "accountingStandard": "CAS",
+        "scope": "CONSOLIDATED",
+        "nature": "ACTUAL",
+        "value": "14000",
+        "unit": "CURRENCY",
+        "currency": "CNY",
+        "customUnit": null,
+        "originalValue": "14000",
+        "originalUnit": "元",
+        "scale": "1",
+        "publishedAt": "2026-04-20T10:00:00Z",
+        "restatementKey": "fixture-original",
+        "evidenceIds": [
+          "00000000-0000-4000-8000-000000000022"
+        ],
+        "extractionVersion": "fixture-1"
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000043",
+        "documentId": "00000000-0000-4000-8000-000000000012",
+        "companyId": "00000000-0000-4000-8000-000000000001",
+        "metric": "cost_of_revenue",
+        "labelOriginal": "营业成本",
+        "segment": null,
+        "period": {
+          "start": "2025-01-01",
+          "end": "2025-12-31",
+          "basis": "YEAR"
+        },
+        "accountingStandard": "CAS",
+        "scope": "CONSOLIDATED",
+        "nature": "ACTUAL",
+        "value": "9660",
+        "unit": "CURRENCY",
+        "currency": "CNY",
+        "customUnit": null,
+        "originalValue": "9660",
+        "originalUnit": "元",
+        "scale": "1",
+        "publishedAt": "2026-04-20T10:00:00Z",
+        "restatementKey": "fixture-original",
+        "evidenceIds": [
+          "00000000-0000-4000-8000-000000000022"
+        ],
+        "extractionVersion": "fixture-1"
+      }
+    ],
+    "calculations": [
+      {
+        "id": "00000000-0000-4000-8000-000000000050",
+        "formulaId": "gross_margin",
+        "formulaVersion": "1",
+        "operandFactIds": [
+          "00000000-0000-4000-8000-000000000040",
+          "00000000-0000-4000-8000-000000000041"
+        ],
+        "operandCalculationIds": [],
+        "result": "0.29",
+        "unit": "RATIO",
+        "displayUnit": "%",
+        "checks": [
+          {
+            "code": "DIMENSIONS_COMPATIBLE",
+            "passed": true,
+            "explanation": "相同主体、累计期间、合并口径和币种"
+          }
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000051",
+        "formulaId": "gross_margin",
+        "formulaVersion": "1",
+        "operandFactIds": [
+          "00000000-0000-4000-8000-000000000042",
+          "00000000-0000-4000-8000-000000000043"
+        ],
+        "operandCalculationIds": [],
+        "result": "0.31",
+        "unit": "RATIO",
+        "displayUnit": "%",
+        "checks": [
+          {
+            "code": "DIMENSIONS_COMPATIBLE",
+            "passed": true,
+            "explanation": "相同主体、年度、合并口径和币种"
+          }
+        ]
+      }
+    ]
+  },
+  "originalThesis": {
+    "id": "00000000-0000-4000-8000-000000000005",
+    "thesisId": "00000000-0000-4000-8000-000000000004",
+    "revision": 1,
+    "groupId": "00000000-0000-4000-8000-000000000003",
+    "text": "2025 全年合并毛利率达到 30%。",
+    "originalText": "预计 2025 年全年合并口径毛利率达到 30%。",
+    "sourceEvidenceIds": [
+      "00000000-0000-4000-8000-000000000020"
+    ],
+    "type": "NUMERIC_FORECAST",
+    "criterion": {
+      "kind": "COMPARE",
+      "metric": "gross_margin",
+      "op": "GTE",
+      "target": "0.30",
+      "unit": "RATIO",
+      "period": {
+        "start": "2025-01-01",
+        "end": "2025-12-31",
+        "basis": "YEAR"
+      },
+      "scope": "CONSOLIDATED",
+      "origin": "REPORT_EXPLICIT"
+    },
+    "priority": 1,
+    "derivedFromThesisIds": [],
+    "extractionIssues": []
+  },
+  "userCorrection": {
+    "id": "00000000-0000-4000-8000-000000000092",
+    "thesisId": "00000000-0000-4000-8000-000000000004",
+    "type": "USER_JUDGMENT",
+    "action": "SET",
+    "before": null,
+    "after": "只以年度合并口径确认全年目标；毛利率达标不代表产品结构原因已证实。",
+    "reason": "研究者确认年度口径与因果边界。",
+    "baseStateVersion": 0,
+    "createdAt": "2025-11-01T02:10:00Z"
+  },
+  "state1": {
+    "schemaVersion": "1.0",
+    "projectId": "00000000-0000-4000-8000-000000000002",
+    "version": 1,
+    "updateId": "00000000-0000-4000-8000-000000000080",
+    "confirmedAt": "2025-11-01T02:10:00Z",
+    "items": [
+      {
+        "thesis": {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "thesisId": "00000000-0000-4000-8000-000000000004",
+          "revision": 1,
+          "groupId": "00000000-0000-4000-8000-000000000003",
+          "text": "2025 全年合并毛利率达到 30%。",
+          "originalText": "预计 2025 年全年合并口径毛利率达到 30%。",
+          "sourceEvidenceIds": [
+            "00000000-0000-4000-8000-000000000020"
+          ],
+          "type": "NUMERIC_FORECAST",
+          "criterion": {
+            "kind": "COMPARE",
+            "metric": "gross_margin",
+            "op": "GTE",
+            "target": "0.30",
+            "unit": "RATIO",
+            "period": {
+              "start": "2025-01-01",
+              "end": "2025-12-31",
+              "basis": "YEAR"
+            },
+            "scope": "CONSOLIDATED",
+            "origin": "REPORT_EXPLICIT"
+          },
+          "priority": 1,
+          "derivedFromThesisIds": [],
+          "extractionIssues": []
+        },
+        "lifecycle": "ACTIVE",
+        "assessment": {
+          "id": "00000000-0000-4000-8000-000000000070",
+          "thesisId": "00000000-0000-4000-8000-000000000004",
+          "thesisRevisionId": "00000000-0000-4000-8000-000000000005",
+          "inputHash": "fixture-t1-input",
+          "status": "UNRESOLVED",
+          "maturity": "IN_PROGRESS",
+          "interimSignal": "BELOW",
+          "summary": "前三季度毛利率 29%，全年目标尚未到核验期。",
+          "factIds": [
+            "00000000-0000-4000-8000-000000000040",
+            "00000000-0000-4000-8000-000000000041"
+          ],
+          "calculationIds": [
+            "00000000-0000-4000-8000-000000000050"
+          ],
+          "evidenceIds": [
+            "00000000-0000-4000-8000-000000000021"
+          ],
+          "observedGap": {
+            "text": "累计毛利率低于全年目标水平 1 个百分点；期间不同，仅作阶段信号。",
+            "evidenceIds": [
+              "00000000-0000-4000-8000-000000000021"
+            ],
+            "factIds": [
+              "00000000-0000-4000-8000-000000000040",
+              "00000000-0000-4000-8000-000000000041"
+            ],
+            "calculationIds": [
+              "00000000-0000-4000-8000-000000000050"
+            ]
+          },
+          "disclosedCauses": [],
+          "hypotheses": [],
+          "conditions": [
+            {
+              "path": "$",
+              "result": "UNKNOWN",
+              "reason": "前三季度累计实际不能代替全年实际。",
+              "evidenceIds": [
+                "00000000-0000-4000-8000-000000000021"
+              ],
+              "calculationIds": [
+                "00000000-0000-4000-8000-000000000050"
+              ]
+            }
+          ],
+          "nextQuestions": [
+            {
+              "id": "00000000-0000-4000-8000-000000000060",
+              "thesisId": "00000000-0000-4000-8000-000000000004",
+              "text": "年报的全年毛利率是否达到 30%？",
+              "requiredEvidence": "2025 年度合并收入和成本",
+              "triggerPeriod": {
+                "start": "2025-01-01",
+                "end": "2025-12-31",
+                "basis": "YEAR"
+              },
+              "status": "OPEN",
+              "answer": null
+            }
+          ],
+          "limitations": [
+            "未披露能够解释利润率变化的产品结构数据。"
+          ]
+        },
+        "userJudgment": "只以年度合并口径确认全年目标；毛利率达标不代表产品结构原因已证实。"
+      }
+    ],
+    "questions": [
+      {
+        "id": "00000000-0000-4000-8000-000000000060",
+        "thesisId": "00000000-0000-4000-8000-000000000004",
+        "text": "年报的全年毛利率是否达到 30%？",
+        "requiredEvidence": "2025 年度合并收入和成本",
+        "triggerPeriod": {
+          "start": "2025-01-01",
+          "end": "2025-12-31",
+          "basis": "YEAR"
+        },
+        "status": "OPEN",
+        "answer": null
+      }
+    ],
+    "method": {
+      "version": 1,
+      "focusMetrics": [
+        "gross_margin"
+      ],
+      "aliases": {},
+      "focusQuestions": [
+        "只比较合并口径"
+      ],
+      "preferences": [
+        "数值目标与因果解释分开写"
+      ]
+    },
+    "sourceManifest": {
+      "asOf": "2025-11-01T02:00:00Z",
+      "hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "documents": [
+        {
+          "documentId": "00000000-0000-4000-8000-000000000010",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "purpose": "原始观点"
+        },
+        {
+          "documentId": "00000000-0000-4000-8000-000000000011",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "purpose": "核验及历史对照"
+        }
+      ],
+      "latestCoveredPeriod": {
+        "start": "2025-01-01",
+        "end": "2025-09-30",
+        "basis": "YTD"
+      },
+      "checkedAt": "2025-11-01T02:00:00Z",
+      "discoveryStatus": "NOT_REQUIRED",
+      "missing": []
+    }
+  },
+  "draft2": {
+    "schemaVersion": "1.0",
+    "id": "00000000-0000-4000-8000-000000000090",
+    "runId": "00000000-0000-4000-8000-000000000091",
+    "projectId": "00000000-0000-4000-8000-000000000002",
+    "revision": 1,
+    "baseStateVersion": 1,
+    "sourceManifest": {
+      "asOf": "2026-04-21T02:00:00Z",
+      "hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "documents": [
+        {
+          "documentId": "00000000-0000-4000-8000-000000000010",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "purpose": "原始观点"
+        },
+        {
+          "documentId": "00000000-0000-4000-8000-000000000011",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "purpose": "核验及历史对照"
+        },
+        {
+          "documentId": "00000000-0000-4000-8000-000000000012",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "purpose": "核验及历史对照"
+        }
+      ],
+      "latestCoveredPeriod": {
+        "start": "2025-01-01",
+        "end": "2025-12-31",
+        "basis": "YEAR"
+      },
+      "checkedAt": "2026-04-21T02:00:00Z",
+      "discoveryStatus": "NOT_REQUIRED",
+      "missing": []
+    },
+    "items": [
+      {
+        "thesis": {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "thesisId": "00000000-0000-4000-8000-000000000004",
+          "revision": 1,
+          "groupId": "00000000-0000-4000-8000-000000000003",
+          "text": "2025 全年合并毛利率达到 30%。",
+          "originalText": "预计 2025 年全年合并口径毛利率达到 30%。",
+          "sourceEvidenceIds": [
+            "00000000-0000-4000-8000-000000000020"
+          ],
+          "type": "NUMERIC_FORECAST",
+          "criterion": {
+            "kind": "COMPARE",
+            "metric": "gross_margin",
+            "op": "GTE",
+            "target": "0.30",
+            "unit": "RATIO",
+            "period": {
+              "start": "2025-01-01",
+              "end": "2025-12-31",
+              "basis": "YEAR"
+            },
+            "scope": "CONSOLIDATED",
+            "origin": "REPORT_EXPLICIT"
+          },
+          "priority": 1,
+          "derivedFromThesisIds": [],
+          "extractionIssues": []
+        },
+        "previous": {
+          "id": "00000000-0000-4000-8000-000000000070",
+          "thesisId": "00000000-0000-4000-8000-000000000004",
+          "thesisRevisionId": "00000000-0000-4000-8000-000000000005",
+          "inputHash": "fixture-t1-input",
+          "status": "UNRESOLVED",
+          "maturity": "IN_PROGRESS",
+          "interimSignal": "BELOW",
+          "summary": "前三季度毛利率 29%，全年目标尚未到核验期。",
+          "factIds": [
+            "00000000-0000-4000-8000-000000000040",
+            "00000000-0000-4000-8000-000000000041"
+          ],
+          "calculationIds": [
+            "00000000-0000-4000-8000-000000000050"
+          ],
+          "evidenceIds": [
+            "00000000-0000-4000-8000-000000000021"
+          ],
+          "observedGap": {
+            "text": "累计毛利率低于全年目标水平 1 个百分点；期间不同，仅作阶段信号。",
+            "evidenceIds": [
+              "00000000-0000-4000-8000-000000000021"
+            ],
+            "factIds": [
+              "00000000-0000-4000-8000-000000000040",
+              "00000000-0000-4000-8000-000000000041"
+            ],
+            "calculationIds": [
+              "00000000-0000-4000-8000-000000000050"
+            ]
+          },
+          "disclosedCauses": [],
+          "hypotheses": [],
+          "conditions": [
+            {
+              "path": "$",
+              "result": "UNKNOWN",
+              "reason": "前三季度累计实际不能代替全年实际。",
+              "evidenceIds": [
+                "00000000-0000-4000-8000-000000000021"
+              ],
+              "calculationIds": [
+                "00000000-0000-4000-8000-000000000050"
+              ]
+            }
+          ],
+          "nextQuestions": [
+            {
+              "id": "00000000-0000-4000-8000-000000000060",
+              "thesisId": "00000000-0000-4000-8000-000000000004",
+              "text": "年报的全年毛利率是否达到 30%？",
+              "requiredEvidence": "2025 年度合并收入和成本",
+              "triggerPeriod": {
+                "start": "2025-01-01",
+                "end": "2025-12-31",
+                "basis": "YEAR"
+              },
+              "status": "OPEN",
+              "answer": null
+            }
+          ],
+          "limitations": [
+            "未披露能够解释利润率变化的产品结构数据。"
+          ]
+        },
+        "proposed": {
+          "id": "00000000-0000-4000-8000-000000000071",
+          "thesisId": "00000000-0000-4000-8000-000000000004",
+          "thesisRevisionId": "00000000-0000-4000-8000-000000000005",
+          "inputHash": "fixture-t2-input",
+          "status": "SUPPORTED",
+          "maturity": "DUE",
+          "interimSignal": "UNKNOWN",
+          "summary": "全年毛利率为 31%，达到 30% 目标。",
+          "factIds": [
+            "00000000-0000-4000-8000-000000000042",
+            "00000000-0000-4000-8000-000000000043"
+          ],
+          "calculationIds": [
+            "00000000-0000-4000-8000-000000000051"
+          ],
+          "evidenceIds": [
+            "00000000-0000-4000-8000-000000000022"
+          ],
+          "observedGap": {
+            "text": "全年毛利率 31%，高于全年目标 1 个百分点。",
+            "evidenceIds": [
+              "00000000-0000-4000-8000-000000000022"
+            ],
+            "factIds": [
+              "00000000-0000-4000-8000-000000000042",
+              "00000000-0000-4000-8000-000000000043"
+            ],
+            "calculationIds": [
+              "00000000-0000-4000-8000-000000000051"
+            ]
+          },
+          "disclosedCauses": [],
+          "hypotheses": [],
+          "conditions": [
+            {
+              "path": "$",
+              "result": "MET",
+              "reason": "全年实际与全年目标同口径可比。",
+              "evidenceIds": [
+                "00000000-0000-4000-8000-000000000022"
+              ],
+              "calculationIds": [
+                "00000000-0000-4000-8000-000000000051"
+              ]
+            }
+          ],
+          "nextQuestions": [],
+          "limitations": [
+            "达到数值目标不等于已经证明产品结构改善是原因。"
+          ]
+        },
+        "change": "CHANGED",
+        "changeReason": "新增年度正式数字，原来的全年问题现在可按同期间核验。",
+        "include": true,
+        "userJudgment": "只以年度合并口径确认全年目标；毛利率达标不代表产品结构原因已证实。"
+      }
+    ],
+    "staleThesisIds": [],
+    "questions": [
+      {
+        "id": "00000000-0000-4000-8000-000000000060",
+        "thesisId": "00000000-0000-4000-8000-000000000004",
+        "text": "年报的全年毛利率是否达到 30%？",
+        "requiredEvidence": "2025 年度合并收入和成本",
+        "triggerPeriod": {
+          "start": "2025-01-01",
+          "end": "2025-12-31",
+          "basis": "YEAR"
+        },
+        "status": "ANSWERED",
+        "answer": {
+          "text": "全年毛利率为 31%，达到 30% 目标。",
+          "evidenceIds": [
+            "00000000-0000-4000-8000-000000000022"
+          ],
+          "factIds": [
+            "00000000-0000-4000-8000-000000000042",
+            "00000000-0000-4000-8000-000000000043"
+          ],
+          "calculationIds": [
+            "00000000-0000-4000-8000-000000000051"
+          ]
+        }
+      }
+    ],
+    "corrections": [],
+    "method": {
+      "version": 1,
+      "focusMetrics": [
+        "gross_margin"
+      ],
+      "aliases": {},
+      "focusQuestions": [
+        "只比较合并口径"
+      ],
+      "preferences": [
+        "数值目标与因果解释分开写"
+      ]
+    }
+  },
+  "state2": {
+    "schemaVersion": "1.0",
+    "projectId": "00000000-0000-4000-8000-000000000002",
+    "version": 2,
+    "updateId": "00000000-0000-4000-8000-000000000081",
+    "confirmedAt": "2026-04-21T02:10:00Z",
+    "items": [
+      {
+        "thesis": {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "thesisId": "00000000-0000-4000-8000-000000000004",
+          "revision": 1,
+          "groupId": "00000000-0000-4000-8000-000000000003",
+          "text": "2025 全年合并毛利率达到 30%。",
+          "originalText": "预计 2025 年全年合并口径毛利率达到 30%。",
+          "sourceEvidenceIds": [
+            "00000000-0000-4000-8000-000000000020"
+          ],
+          "type": "NUMERIC_FORECAST",
+          "criterion": {
+            "kind": "COMPARE",
+            "metric": "gross_margin",
+            "op": "GTE",
+            "target": "0.30",
+            "unit": "RATIO",
+            "period": {
+              "start": "2025-01-01",
+              "end": "2025-12-31",
+              "basis": "YEAR"
+            },
+            "scope": "CONSOLIDATED",
+            "origin": "REPORT_EXPLICIT"
+          },
+          "priority": 1,
+          "derivedFromThesisIds": [],
+          "extractionIssues": []
+        },
+        "lifecycle": "ACTIVE",
+        "assessment": {
+          "id": "00000000-0000-4000-8000-000000000071",
+          "thesisId": "00000000-0000-4000-8000-000000000004",
+          "thesisRevisionId": "00000000-0000-4000-8000-000000000005",
+          "inputHash": "fixture-t2-input",
+          "status": "SUPPORTED",
+          "maturity": "DUE",
+          "interimSignal": "UNKNOWN",
+          "summary": "全年毛利率为 31%，达到 30% 目标。",
+          "factIds": [
+            "00000000-0000-4000-8000-000000000042",
+            "00000000-0000-4000-8000-000000000043"
+          ],
+          "calculationIds": [
+            "00000000-0000-4000-8000-000000000051"
+          ],
+          "evidenceIds": [
+            "00000000-0000-4000-8000-000000000022"
+          ],
+          "observedGap": {
+            "text": "全年毛利率 31%，高于全年目标 1 个百分点。",
+            "evidenceIds": [
+              "00000000-0000-4000-8000-000000000022"
+            ],
+            "factIds": [
+              "00000000-0000-4000-8000-000000000042",
+              "00000000-0000-4000-8000-000000000043"
+            ],
+            "calculationIds": [
+              "00000000-0000-4000-8000-000000000051"
+            ]
+          },
+          "disclosedCauses": [],
+          "hypotheses": [],
+          "conditions": [
+            {
+              "path": "$",
+              "result": "MET",
+              "reason": "全年实际与全年目标同口径可比。",
+              "evidenceIds": [
+                "00000000-0000-4000-8000-000000000022"
+              ],
+              "calculationIds": [
+                "00000000-0000-4000-8000-000000000051"
+              ]
+            }
+          ],
+          "nextQuestions": [],
+          "limitations": [
+            "达到数值目标不等于已经证明产品结构改善是原因。"
+          ]
+        },
+        "userJudgment": "只以年度合并口径确认全年目标；毛利率达标不代表产品结构原因已证实。"
+      }
+    ],
+    "questions": [
+      {
+        "id": "00000000-0000-4000-8000-000000000060",
+        "thesisId": "00000000-0000-4000-8000-000000000004",
+        "text": "年报的全年毛利率是否达到 30%？",
+        "requiredEvidence": "2025 年度合并收入和成本",
+        "triggerPeriod": {
+          "start": "2025-01-01",
+          "end": "2025-12-31",
+          "basis": "YEAR"
+        },
+        "status": "ANSWERED",
+        "answer": {
+          "text": "全年毛利率为 31%，达到 30% 目标。",
+          "evidenceIds": [
+            "00000000-0000-4000-8000-000000000022"
+          ],
+          "factIds": [
+            "00000000-0000-4000-8000-000000000042",
+            "00000000-0000-4000-8000-000000000043"
+          ],
+          "calculationIds": [
+            "00000000-0000-4000-8000-000000000051"
+          ]
+        }
+      }
+    ],
+    "method": {
+      "version": 1,
+      "focusMetrics": [
+        "gross_margin"
+      ],
+      "aliases": {},
+      "focusQuestions": [
+        "只比较合并口径"
+      ],
+      "preferences": [
+        "数值目标与因果解释分开写"
+      ]
+    },
+    "sourceManifest": {
+      "asOf": "2026-04-21T02:00:00Z",
+      "hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "documents": [
+        {
+          "documentId": "00000000-0000-4000-8000-000000000010",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "purpose": "原始观点"
+        },
+        {
+          "documentId": "00000000-0000-4000-8000-000000000011",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "purpose": "核验及历史对照"
+        },
+        {
+          "documentId": "00000000-0000-4000-8000-000000000012",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "purpose": "核验及历史对照"
+        }
+      ],
+      "latestCoveredPeriod": {
+        "start": "2025-01-01",
+        "end": "2025-12-31",
+        "basis": "YEAR"
+      },
+      "checkedAt": "2026-04-21T02:00:00Z",
+      "discoveryStatus": "NOT_REQUIRED",
+      "missing": []
+    }
+  },
+  "expectedChecks": [
+    "state1.items[0].thesis.thesisId === state2.items[0].thesis.thesisId",
+    "state1 remains immutable after confirming state2",
+    "state2.items[0].userJudgment === state1.items[0].userJudgment",
+    "state1 assessment UNRESOLVED / IN_PROGRESS, not WEAKENED",
+    "state2 assessment SUPPORTED / DUE",
+    "question 60 transitions OPEN -> ANSWERED",
+    "official discovery is NOT_REQUIRED only because this is synthetic fixture, not real acceptance"
+  ]
+}

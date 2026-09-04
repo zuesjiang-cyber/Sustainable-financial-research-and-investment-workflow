@@ -23,7 +23,8 @@ export function parseDecimalSafe(val?: string | number | null): Decimal | null {
   if (val === undefined || val === null || val === "") return null;
   try {
     const clean = String(val).replace(/,/g, "").trim();
-    return new Decimal(clean);
+    const parsed = new Decimal(clean);
+    return parsed.isFinite() ? parsed : null;
   } catch {
     return null;
   }
@@ -41,7 +42,7 @@ export function formatYi(d: Decimal | number): string {
 
 // Extract any numeric numbers mentioned in text
 export function extractNumbersFromText(text: string): string[] {
-  const matches = text.match(/\d+(?:\.\d+)?/g);
+  const matches = text.match(/[+-]?\d+(?:\.\d+)?/g);
   return matches || [];
 }
 
@@ -96,7 +97,7 @@ export function evaluateStructuredCondition(
       passed = actualValue.lessThan(target);
       break;
     case "==":
-      passed = actualValue.minus(target).abs().lessThan(0.01);
+      passed = actualValue.equals(target);
       break;
     case "between":
       if (cond.value2 !== undefined) {
@@ -116,32 +117,29 @@ export function evaluateStructuredCondition(
 
 // Parse threshold string if structured_condition is not provided
 export function parseThresholdString(threshStr: string): { operator: ">=" | ">" | "<=" | "<" | "between"; value: number; value2?: number; unit: string } | null {
-  // Check for between: e.g. "25%–28%" or "±0.50 个百分点以内"
-  if (threshStr.includes("±0.50") || threshStr.includes("0.50 个百分点以内")) {
-    return { operator: "between", value: -0.5, value2: 0.5, unit: "pct" };
+  const unit = /百分点|pct/i.test(threshStr) ? "pct" : threshStr.includes("%") ? "%" : "";
+  const symmetric = threshStr.match(/±\s*(\d+(?:\.\d+)?)/);
+  if (symmetric) return { operator: "between", value: -Number(symmetric[1]), value2: Number(symmetric[1]), unit };
+  const range = threshStr.match(/(-?\d+(?:\.\d+)?)\s*%?\s*[–—~～至-]\s*(-?\d+(?:\.\d+)?)\s*%?/);
+  if (range) return { operator: "between", value: Number(range[1]), value2: Number(range[2]), unit };
+  const numMatch = threshStr.match(/[+-]?\d+(?:\.\d+)?/);
+  if (!numMatch) {
+    if (/下降|下滑/.test(threshStr)) return { operator: "<", value: 0, unit };
+    return null;
   }
-  if (threshStr.includes("25%–28%") || threshStr.includes("25%-28%")) {
-    return { operator: "between", value: 25, value2: 28, unit: "%" };
+  let value = Number(numMatch[0]);
+  let operator: ">=" | ">" | "<=" | "<";
+  if (/不低于|不少于|大于等于|>=|≥/.test(threshStr)) operator = ">=";
+  else if (/不超过|不高于|至多|小于等于|<=|≤/.test(threshStr)) operator = "<=";
+  else if (/超过|高于|大于|>/.test(threshStr)) operator = ">";
+  else if (/低于|小于|</.test(threshStr)) operator = "<";
+  else return null;
+  // A fall of more than 0.5 pp means signed change < -0.5, not < +0.5.
+  if (/下降|下滑/.test(threshStr) && !/或/.test(threshStr) && value >= 0) {
+    value = -value;
+    operator = ({ ">": "<", ">=": "<=", "<": ">", "<=": ">=" } as const)[operator];
   }
-
-  const numMatch = threshStr.match(/(\d+(?:\.\d+)?)/);
-  if (!numMatch) return null;
-  const num = parseFloat(numMatch[1]);
-  const isPct = threshStr.includes("%") || threshStr.includes("百分点");
-
-  if (threshStr.includes("不低于") || threshStr.includes("大于等于") || threshStr.includes(">= ") || threshStr.includes(">= ")) {
-    return { operator: ">=", value: num, unit: isPct ? "%" : "" };
-  }
-  if (threshStr.includes("超过") || threshStr.includes("大于") || threshStr.includes(">")) {
-    return { operator: ">", value: num, unit: isPct ? "%" : "" };
-  }
-  if (threshStr.includes("低于") || threshStr.includes("小于") || threshStr.includes("<")) {
-    return { operator: "<", value: num, unit: isPct ? "%" : "" };
-  }
-  if (threshStr.includes("不超过") || threshStr.includes("小于等于") || threshStr.includes("<=")) {
-    return { operator: "<=", value: num, unit: isPct ? "%" : "" };
-  }
-  return { operator: ">=", value: num, unit: isPct ? "%" : "" };
+  return { operator, value, unit };
 }
 
 // Core calculation & evaluation
@@ -167,7 +165,9 @@ export function computeFinTrustAnalysis(caseInput: CaseInput): AnalysisOutput {
   const getFactVal = (metric: string, period: string): Decimal | null => {
     const f = factMap.get(factKey(metric, period));
     if (!f) return null;
-    return parseDecimalSafe(f.value);
+    const parsed = parseDecimalSafe(f.value);
+    if (!parsed) return null;
+    return normalizeValue(parsed.toString(), f.unit);
   };
 
   // Base and Current core values
@@ -295,7 +295,7 @@ export function computeFinTrustAnalysis(caseInput: CaseInput): AnalysisOutput {
     current_value: revYoyRes.deltaVal,
     delta_value: revYoyRes.deltaVal,
     delta_type: revYoyRes.deltaType,
-    description: `同比增速计算：(当期-基期)/基期 = ${revYoyRes.deltaVal}%`,
+    description: revYoyRes.note || `同比增速计算：(当期-基期)/基期 = ${revYoyRes.deltaVal}%`,
     provenance_type: "calculated",
   };
 
@@ -456,12 +456,12 @@ export function computeFinTrustAnalysis(caseInput: CaseInput): AnalysisOutput {
       category: "narrative",
       topic_or_metric: pair.topic,
       label: pair.label,
-      source_tag: "AI 语义比较",
+      source_tag: "原文并列对照",
       summary: `[披露对比] 基期披露“${bSnippet.slice(0, 24)}...”，当期演进为“${cSnippet.slice(0, 28)}...”`,
       detail: cSnippet,
       relevance: `反映公司在【${pair.label}】维度的战略推进与官方披露口径演进。`,
       evidence_ids: [pair.base.evidence_id, pair.current.evidence_id].filter(Boolean),
-      provenance_type: "ai",
+      provenance_type: "source",
     };
   });
 
@@ -479,24 +479,38 @@ export function computeFinTrustAnalysis(caseInput: CaseInput): AnalysisOutput {
     const baseThresh = pillar.structured_conditions?.baseline || parseThresholdString(pillar.baseline_threshold);
     const strThresh = pillar.structured_conditions?.strengthen || parseThresholdString(pillar.strengthen_threshold);
     const weakThresh = pillar.structured_conditions?.weaken || parseThresholdString(pillar.weaken_threshold);
+    const passes = (value: Decimal, condition: typeof baseThresh) => !!condition && evaluateStructuredCondition(value, { metric: "", ...condition }).passed;
+    const structuredValues: Record<string, Decimal | null | undefined> = {
+      revenue_yoy: revYoy, gross_margin_diff: gmDiff, gross_margin: gmCurr,
+      operating_cash_flow_yoy: cfYoyRes.decValue, cash_to_net_profit_ratio: cfToNpRatio,
+      rd_expense_yoy: rdYoyRes.decValue, rd_expense_ratio: rdRatioCurr,
+    };
+    const explicit = pillar.structured_conditions;
+    if (explicit) {
+      const evaluate = (cond?: StructuredCondition) => {
+        if (!cond) return null;
+        const value = structuredValues[cond.metric] ?? parseDecimalSafe(metrics[cond.metric]?.current_value);
+        return value ? evaluateStructuredCondition(value, cond) : null;
+      };
+      const evaluations = { weaken: evaluate(explicit.weaken), strengthen: evaluate(explicit.strengthen), baseline: evaluate(explicit.baseline) };
+      const matched = evaluations.weaken?.passed ? "weaken" : evaluations.strengthen?.passed ? "strengthen" : evaluations.baseline?.passed ? "baseline" : null;
+      status = matched === "weaken" ? "削弱" : matched === "strengthen" ? "加强" : matched === "baseline" ? "保持" : "待评估";
+      reason = matched ? evaluations[matched]!.reason : "尚未满足给定结构化条件，或条件对应指标缺失；请复核门槛与证据。";
+      thesis_updates.push({ pillar_id: pillar.id, title: pillar.title, original_view: pillar.original_view, status, status_tag: status,
+        trigger_data: reason, reason, monitor_next: pillar.monitor_next, evidence_ids: [...new Set(caseInput.facts.map((f) => f.evidence_id).filter(Boolean))],
+        provenance_type: "calculated", structured_rule_evaluation: Object.values(evaluations).filter(Boolean).map((e) => e!.reason).join("；") });
+      continue;
+    }
 
     if (pillar.id === "revenue_growth") {
       evidenceIds = [factEvidenceMap.get(factKey("revenue", currPeriod)) || "E25_P13_SUMMARY"];
       if (revYoy) {
         // Structured evaluation: Cleanly partitioned boundaries
         // Check strengthen first
-        const isStrengthen = strThresh
-          ? strThresh.operator === ">"
-            ? revYoy.greaterThan(strThresh.value)
-            : revYoy.greaterThanOrEqualTo(strThresh.value)
-          : revYoy.greaterThan(20);
+        const isStrengthen = passes(revYoy, strThresh);
 
         // Check baseline: strictly between weaken boundary and strengthen boundary
-        const isBaseline = baseThresh
-          ? baseThresh.operator === ">="
-            ? revYoy.greaterThanOrEqualTo(baseThresh.value)
-            : revYoy.greaterThan(baseThresh.value)
-          : revYoy.greaterThanOrEqualTo(15);
+        const isBaseline = passes(revYoy, baseThresh);
 
         if (isStrengthen) {
           status = "加强";
@@ -504,9 +518,12 @@ export function computeFinTrustAnalysis(caseInput: CaseInput): AnalysisOutput {
         } else if (isBaseline) {
           status = "保持";
           reason = `营业收入同比增长 ${format2(revYoy)}%，满足基线要求（${pillar.baseline_threshold}），但未达强劲扩张线（${pillar.strengthen_threshold}），维持成立。`;
-        } else {
+        } else if (passes(revYoy, weakThresh)) {
           status = "削弱";
           reason = `营业收入同比增速仅为 ${format2(revYoy)}%，未达基线目标（${pillar.baseline_threshold}），落入削弱区间。`;
+        } else {
+          status = "待评估";
+          reason = `收入同比 ${format2(revYoy)}%，未满足基线，也未触发设定的削弱条件；需要进一步研究。`;
         }
         triggerData = `营收同比增速：${revYoy.isNegative() ? "" : "+"}${format2(revYoy)}%（基线 ${pillar.baseline_threshold}）`;
       } else {
@@ -521,18 +538,18 @@ export function computeFinTrustAnalysis(caseInput: CaseInput): AnalysisOutput {
         // Strengthen: diff > +0.50 pct (or strThresh)
         // Maintained: -0.50 pct <= diff <= +0.50 pct (stable baseline)
         // Weaken: diff < -0.50 pct
-        const strVal = strThresh?.value ?? 0.5;
-        const weakVal = weakThresh?.value ?? -0.5;
-
-        if (gmDiff.greaterThan(strVal)) {
+        if (passes(gmDiff, strThresh)) {
           status = "加强";
           reason = `综合毛利率由 ${format2(gmBase)}% 提升至 ${format2(gmCurr)}%（同比提升 ${format2(gmDiff)} 个百分点），超越门槛（${pillar.strengthen_threshold}），盈利质量提升。`;
-        } else if (gmDiff.lessThan(weakVal)) {
+        } else if (passes(gmDiff, weakThresh)) {
           status = "削弱";
-          reason = `综合毛利率由 ${format2(gmBase)}% 降至 ${format2(gmCurr)}%（变动 ${format2(gmDiff)} 个百分点），突破稳定区间下限（${pillar.weaken_threshold}），反映产品竞争或代工成本对毛利造成挤压。`;
-        } else {
+          reason = `综合毛利率由 ${format2(gmBase)}% 变为 ${format2(gmCurr)}%（变动 ${format2(gmDiff)} 个百分点），触发条件（${pillar.weaken_threshold}）。原因尚需材料验证。`;
+        } else if (passes(gmDiff, baseThresh) || (!baseThresh && gmDiff.isZero())) {
           status = "保持";
           reason = `综合毛利率为 ${format2(gmCurr)}%（同比变动 ${format2(gmDiff)} 个百分点），落在合理稳定区间（${pillar.baseline_threshold}）。`;
+        } else {
+          status = "待评估";
+          reason = `毛利率变动 ${format2(gmDiff)} 个百分点，尚未匹配给定条件。`;
         }
         triggerData = `毛利率 ${format2(gmCurr)}%（同比变动 ${format2(gmDiff)} 个百分点）`;
       } else {
@@ -544,9 +561,9 @@ export function computeFinTrustAnalysis(caseInput: CaseInput): AnalysisOutput {
       evidenceIds = [factEvidenceMap.get(factKey("operating_cash_flow", currPeriod)) || "E25_P89_CASH_FLOW"];
       const cfYoy = cfYoyRes.decValue;
       if (cfCurr && cfBase && cfYoy && cfToNpRatio) {
-        if (cfYoy.isNegative() || cfToNpRatio.lessThan(0.9)) {
+        if ((/下降|下滑/.test(pillar.weaken_threshold) && cfYoy.isNegative()) || passes(cfToNpRatio, weakThresh)) {
           status = "削弱";
-          reason = `经营现金流同比变动 ${format2(cfYoy)}%，现金利润比降至 ${format2(cfToNpRatio)} 倍（低于 0.90 倍基线），现金流与盈利匹配度被削弱。`;
+          reason = `经营现金流同比变动 ${format2(cfYoy)}%，现金利润比 ${format2(cfToNpRatio)} 倍，触发削弱条件（${pillar.weaken_threshold}）。`;
         } else if (revYoy && cfYoy.greaterThan(revYoy)) {
           status = "加强";
           reason = `经营现金流同比增长 ${format2(cfYoy)}%，超越营收增速（${format2(revYoy)}%），造血能力增强。`;
@@ -564,12 +581,12 @@ export function computeFinTrustAnalysis(caseInput: CaseInput): AnalysisOutput {
       evidenceIds = [factEvidenceMap.get(factKey("rd_expense", currPeriod)) || "E25_P85_COST_REVENUE"];
       const rdYoy = rdYoyRes.decValue;
       if (rdRatioCurr && rdYoy) {
-        if (rdRatioCurr.lessThan(23) || rdYoy.isNegative()) {
+        if (passes(rdRatioCurr, weakThresh) || (/下降|下滑/.test(pillar.weaken_threshold) && rdYoy.isNegative())) {
           status = "削弱";
           reason = `研发费用率 (${format2(rdRatioCurr)}%) 低于战略底线或研发绝对额同比下滑。`;
-        } else if (rdYoy.greaterThanOrEqualTo(10) && rdRatioCurr.greaterThanOrEqualTo(25) && rdRatioCurr.lessThanOrEqualTo(28)) {
+        } else if (rdYoy.greaterThanOrEqualTo(10) && /双位数/.test(pillar.strengthen_threshold) && passes(rdRatioCurr, baseThresh)) {
           status = "加强";
-          reason = `研发费用保持双位数增长（+${format2(rdYoy)}%），且费用率达 ${format2(rdRatioCurr)}%，稳稳落在 25%–28% 战略目标区间。`;
+          reason = `研发费用同比增长 ${format2(rdYoy)}%，费用率 ${format2(rdRatioCurr)}%，满足目标区间（${pillar.baseline_threshold}）。`;
         } else {
           status = "保持";
           reason = `研发费用率达 ${format2(rdRatioCurr)}%，研发投入节奏平稳。`;
@@ -679,7 +696,7 @@ export function computeFinTrustAnalysis(caseInput: CaseInput): AnalysisOutput {
               if (maxVal.isZero()) {
                 isMatch = diff.isZero();
               } else {
-                isMatch = diff.dividedBy(maxVal).lessThan(0.005) || diff.lessThan(0.05);
+                isMatch = diff.dividedBy(maxVal).lessThan(0.001) || diff.lessThan(0.05);
               }
             }
           } catch {

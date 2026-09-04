@@ -1,0 +1,247 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FinTrust normalized parser manifest",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "documentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "fileSha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "parserVersion": {
+      "type": "string"
+    },
+    "optionsHash": {
+      "type": "string"
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pageNumber": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "printedLabel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "widthPt": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "heightPt": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "rotation": {
+            "type": "integer",
+            "enum": [
+              0,
+              90,
+              180,
+              270
+            ]
+          }
+        },
+        "required": [
+          "pageNumber",
+          "printedLabel",
+          "widthPt",
+          "heightPt",
+          "rotation"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "blocks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "PARAGRAPH",
+              "HEADING",
+              "LIST",
+              "CAPTION",
+              "FOOTNOTE"
+            ]
+          },
+          "headingPath": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "text": {
+            "type": "string"
+          },
+          "regions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "pageNumber": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "bbox": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "minItems": 4,
+                  "maxItems": 4
+                }
+              },
+              "required": [
+                "pageNumber",
+                "bbox"
+              ]
+            }
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "NATIVE",
+              "OCR_RELIABLE",
+              "OCR_UNCERTAIN"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "headingPath",
+          "text",
+          "regions",
+          "quality"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "tables": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "headers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "continuationOf": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cells": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "row": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "col": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "rowSpan": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "colSpan": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "text": {
+                  "type": "string"
+                },
+                "region": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "pageNumber": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "bbox": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "minItems": 4,
+                      "maxItems": 4
+                    }
+                  },
+                  "required": [
+                    "pageNumber",
+                    "bbox"
+                  ]
+                }
+              },
+              "required": [
+                "row",
+                "col",
+                "rowSpan",
+                "colSpan",
+                "text",
+                "region"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "id",
+          "caption",
+          "headers",
+          "continuationOf",
+          "cells"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "documentId",
+    "fileSha256",
+    "parserVersion",
+    "optionsHash",
+    "pages",
+    "blocks",
+    "tables"
+  ],
+  "additionalProperties": false
+}
