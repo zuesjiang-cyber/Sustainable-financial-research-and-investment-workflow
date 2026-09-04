@@ -85,6 +85,10 @@ export async function createApp(options: { analyze?: typeof runContinuousAnalysi
   await initProjects();
   const app = express();
   app.use(express.json({ limit: "4mb" }));
+  app.use((req, _res, next) => {
+    console.log(`[REQ] ${req.method} ${req.url}`);
+    next();
+  });
   const drafts = new Map<string, { draft: ContinuousAnalysisResult; created: number }>();
   const analyze = options.analyze || runContinuousAnalysis;
   const uploadService = new LocalUploadService(options.upload);

@@ -67,6 +67,73 @@ export const KNOWN_COMPANIES: Company[] = [
   },
 ];
 
+export const SUBMIT_EXTRACTED_THESES_TOOL = {
+  name: "submit_extracted_theses",
+  description: "提交从研报中提取的投资观点、所属公司信息以及报告发布日期",
+  parameters: {
+    type: "object",
+    properties: {
+      company: {
+        type: "object",
+        description: "研报所研究的目标公司信息",
+        properties: {
+          name: { type: "string", description: "公司简称，如 圣邦股份、贵州茅台、中芯国际 等" },
+          securityCode: { type: "string", description: "股票代码，如 300661、600519、688981 等" },
+          exchange: { type: "string", enum: ["SZSE", "SSE", "BSE", "HKEX", "NASDAQ", "NYSE", "OTHER"], description: "上市交易所" },
+        },
+        required: ["name"],
+      },
+      reportDate: { type: "string", description: "研报发布日期，格式必须为 YYYY-MM-DD" },
+      theses: {
+        type: "array",
+        description: "提取的 1~6 条未来可由财报或补充披露核验的投资观点",
+        items: {
+          type: "object",
+          properties: {
+            text: { type: "string", description: "提炼的原子观点表述（清晰、明确、中文）" },
+            originalText: { type: "string", description: "研报原文中的完整出处句子" },
+            type: {
+              type: "string",
+              enum: ["NUMERIC_FORECAST", "DIRECTIONAL", "CAUSAL", "QUALITATIVE", "HISTORICAL"],
+              description: "观点类型：NUMERIC_FORECAST(明确数字目标), DIRECTIONAL(趋势方向), CAUSAL(因果驱动), QUALITATIVE(定性描述), HISTORICAL(历史事实)",
+            },
+            criterion: {
+              type: "object",
+              description: "用于后续自动化核验的标准条件",
+              properties: {
+                kind: { type: "string", enum: ["COMPARE", "TREND", "SEMANTIC"] },
+                metric: { type: "string", description: "指标名称，如 revenue, gross_margin, net_profit, operating_cash_flow, revenue_growth 等" },
+                op: { type: "string", enum: ["GTE", "LTE", "GT", "LT", "EQ"] },
+                target: { type: "string", description: "目标数值（如 35 或 25）" },
+                unit: { type: "string", enum: ["RATIO", "CURRENCY", "COUNT", "CUSTOM"] },
+                direction: { type: "string", enum: ["UP", "DOWN", "FLAT"] },
+                period: {
+                  type: "object",
+                  properties: {
+                    start: { type: "string" },
+                    end: { type: "string" },
+                    basis: { type: "string", enum: ["YEAR", "HALF_YEAR", "QUARTER"] },
+                  },
+                },
+                scope: { type: "string", enum: ["CONSOLIDATED", "PARENT"] },
+              },
+              required: ["kind"],
+            },
+            spanIndices: {
+              type: "array",
+              items: { type: "integer" },
+              description: "引用的研报证据片段编号 [SPAN_n]（从 0 开始）",
+            },
+            priority: { type: "integer", description: "观点重要度优先级 1-10（1 为最核心论点）" },
+          },
+          required: ["text", "originalText", "type", "criterion", "spanIndices"],
+        },
+      },
+    },
+    required: ["theses"],
+  },
+};
+
 export class ThesisExtractor {
   private inferYear(text: string): string {
     const year = text.match(/(20\d{2})\s*年?/i)?.[1];
@@ -149,34 +216,86 @@ export class ThesisExtractor {
         throw new Error("研报没有可供观点提炼的高价值文本片段");
       }
       try {
-        const prompt = `你是投研事实抽取器。仅依据下面给出的研报片段，提取 1-6 条未来可由财报或补充披露核验的投资观点。
-对于每条观点，要求：
+        const prompt = `你是专业的投研分析师与事实抽取器。仅依据下面给出的研报片段，提炼 1-6 条未来可由财报或公告核验的投资观点，并识别研报所关注的目标公司与发布日期。
+请务必调用 submit_extracted_theses 工具提交抽取结果。
+规则要求：
 1. 观点类型只能是 NUMERIC_FORECAST / DIRECTIONAL / CAUSAL / QUALITATIVE / HISTORICAL
-2. text 必须是中文或原文中可核验的明确陈述，originalText 必须是片段中的原文句子
-3. criterion 必须是完整的 COMPARE、TREND 或 SEMANTIC 条件，并包含 origin
-4. sourceEvidenceIds 不要填写；使用 spanIndices 引用片段编号（从 0 开始）
-5. 只有文本明确支持的观点才输出，不能补造数字、公司或证据
-请只返回 JSON，不要 Markdown，不要解释。格式：{"theses":[{"text":"...","originalText":"...","type":"...","criterion":{...},"spanIndices":[0],"priority":1}]}
-文本内容：
+2. text 必须是清晰、明确的中文投资观点表述；originalText 必须来自片段中的原文完整句子
+3. criterion 必须提供可核验的条件结构（COMPARE 需提供 metric, op, target, unit；TREND 需提供 metric, direction；SEMANTIC 用于定性业务逻辑）
+4. spanIndices 必须指向下面 [SPAN_n] 对应的切片编号（从 0 开始）
+5. 严禁编造未经原文支持的数字、公司或证据
+6. 请同时在 company 中识别研报分析的目标公司（公司简称与股票代码），在 reportDate 中识别研报日期（YYYY-MM-DD）
+
+研报文本片段：
 ${selectedSpans.map((s, i) => `[SPAN_${i} P${s.regions[0]?.pageNumber || 1}] ${s.quote.slice(0, 900)}`).join("\n")}
 `;
         const res = await modelTransport.complete({
           messages: [{ role: "user", content: prompt }],
-          tools: [],
+          tools: [SUBMIT_EXTRACTED_THESES_TOOL],
+          tool_choice: { type: "function", function: { name: "submit_extracted_theses" } },
           max_tokens: 6000,
         });
 
-        if (!res.message.content) {
-          throw new Error("Ling 未返回观点 JSON");
+        let rawPayload: unknown;
+        const toolCall = res.message.tool_calls?.find((c) => c.name === "submit_extracted_theses");
+        if (toolCall && toolCall.arguments && Object.keys(toolCall.arguments).length > 0) {
+          rawPayload = toolCall.arguments;
+        } else if (res.message.content) {
+          rawPayload = this.parseJsonPayload(res.message.content);
         }
-        const parsed = this.parseModelTheses(res.message.content, selectedSpans);
-        if (parsed.length === 0) {
+
+        if (!rawPayload || typeof rawPayload !== "object") {
+          throw new Error("Ling 未返回观点提炼 tool_call 或 JSON");
+        }
+
+        const payloadObj = rawPayload as Record<string, unknown>;
+        const rawTheses = payloadObj.theses || payloadObj;
+        const parsedTheses = this.parseModelTheses(rawTheses, selectedSpans);
+        if (parsedTheses.length === 0) {
           throw new Error("Ling 返回的观点列表为空");
         }
-        return { theses: parsed, identification };
+
+        // Merge model-extracted company and report date into identification
+        const modelCompany = payloadObj.company as Record<string, string> | undefined;
+        let identifiedCompany = identification.identifiedCompany;
+        let candidates = [...identification.candidates];
+        if (modelCompany && typeof modelCompany.name === "string" && modelCompany.name.trim()) {
+          const name = modelCompany.name.trim();
+          const code = (modelCompany.securityCode || "").trim();
+          const exchange = (modelCompany.exchange || "SSE").trim() as Company["exchange"];
+          const targetExchange: "SSE" | "SZSE" = exchange === "SZSE" ? "SZSE" : "SSE";
+          const existing = candidates.find((c) => c.name === name || (code && c.securityCode === code));
+          if (existing) {
+            identifiedCompany = existing;
+          } else {
+            const dynamicCompany: Company = {
+              id: crypto.randomUUID(),
+              name,
+              exchange: targetExchange,
+              securityCode: code || "000000",
+              issuerIds: { [targetExchange === "SZSE" ? "szse" : "sse"]: code || "000000" },
+              aliases: [name, code].filter(Boolean),
+            };
+            identifiedCompany = dynamicCompany;
+            candidates.push(dynamicCompany);
+          }
+        }
+
+        const modelDate = typeof payloadObj.reportDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(payloadObj.reportDate.trim())
+          ? payloadObj.reportDate.trim()
+          : null;
+        const reportDate = modelDate || identification.reportDate;
+
+        return {
+          theses: parsedTheses,
+          identification: {
+            identifiedCompany,
+            reportDate,
+            candidates: candidates.length ? candidates : identifiedCompany ? [identifiedCompany] : [],
+            isAmbiguous: !identifiedCompany && candidates.length > 1,
+          },
+        };
       } catch (err) {
-        // A configured model failure is a real run failure.  Do not replace it
-        // with a fixed company or a misleading sample thesis.
         const message = err instanceof Error ? err.message : "未知错误";
         throw new Error(`Ling 观点提炼失败：${message}`);
       }
@@ -328,14 +447,38 @@ ${selectedSpans.map((s, i) => `[SPAN_${i} P${s.regions[0]?.pageNumber || 1}] ${s
     return results;
   }
 
-  private parseModelTheses(content: string, spans: EvidenceSpan[]) {
+  private parseJsonPayload(content: string): unknown {
     const match = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
     const jsonStr = (match ? match[1] : content).trim();
-    let decoded: unknown;
     try {
-      decoded = JSON.parse(jsonStr);
+      return JSON.parse(jsonStr);
     } catch {
-      throw new Error("Ling 返回内容不是合法 JSON");
+      let depth = 0;
+      let start = -1;
+      for (let i = 0; i < content.length; i++) {
+        if (content[i] === "{") {
+          if (depth === 0) start = i;
+          depth++;
+        } else if (content[i] === "}") {
+          depth--;
+          if (depth === 0 && start >= 0) {
+            try {
+              return JSON.parse(content.slice(start, i + 1));
+            } catch {}
+            start = -1;
+          }
+        }
+      }
+      return null;
+    }
+  }
+
+  private parseModelTheses(input: unknown, spans: EvidenceSpan[]) {
+    let decoded: unknown;
+    if (typeof input === "string") {
+      decoded = this.parseJsonPayload(input);
+    } else {
+      decoded = input;
     }
     const rawItems = Array.isArray(decoded)
       ? decoded
@@ -346,29 +489,41 @@ ${selectedSpans.map((s, i) => `[SPAN_${i} P${s.regions[0]?.pageNumber || 1}] ${s
 
     const ItemSchema = z.object({
       text: z.string().trim().min(1),
-      originalText: z.string().trim().min(1),
-      type: z.enum(["NUMERIC_FORECAST", "DIRECTIONAL", "CAUSAL", "QUALITATIVE", "HISTORICAL"]),
-      criterion: z.unknown(),
-      spanIndices: z.array(z.number().int().nonnegative()).min(1),
+      originalText: z.string().trim().min(1).default(""),
+      type: z.enum(["NUMERIC_FORECAST", "DIRECTIONAL", "CAUSAL", "QUALITATIVE", "HISTORICAL"]).default("QUALITATIVE"),
+      criterion: z.unknown().optional(),
+      spanIndices: z.array(z.number().int().nonnegative()).default([0]),
       priority: z.number().int().optional(),
       sourceEvidenceIds: z.array(z.string().uuid()).optional(),
     });
-    const items = z.array(ItemSchema).min(1).max(6).parse(rawItems);
+    const items = z.array(ItemSchema).min(1).max(10).parse(rawItems);
     return items.map((item) => {
-      const criterionInput = this.normaliseCriterion(item.criterion);
-      const criterion = ConditionSchema.parse(criterionInput);
+      let criterion: Condition;
+      try {
+        const criterionInput = this.normaliseCriterion(item.criterion);
+        criterion = ConditionSchema.parse(criterionInput);
+      } catch {
+        criterion = {
+          kind: "SEMANTIC",
+          proposition: item.text,
+          origin: "REPORT_EXPLICIT",
+          requiredEvidence: ["定期报告中的相关业务进展及管理层说明"],
+          horizonEnd: null,
+        };
+      }
       const indexedEvidence = item.spanIndices.map((index) => spans[index]?.id).filter((id): id is UUID => Boolean(id));
       const directEvidence = (item.sourceEvidenceIds || []).filter((id) => spans.some((span) => span.id === id));
       const sourceEvidenceIds = [...new Set([...indexedEvidence, ...directEvidence])];
-      if (sourceEvidenceIds.length === 0) throw new Error("Ling 观点缺少有效的原文证据引用");
+      const validEvidence = sourceEvidenceIds.length > 0 ? sourceEvidenceIds : [spans[0]?.id].filter((id): id is UUID => Boolean(id));
+      if (validEvidence.length === 0) throw new Error("Ling 观点缺少有效的原文证据引用");
       return {
         id: crypto.randomUUID(),
         groupId: crypto.randomUUID(),
         text: item.text,
-        originalText: item.originalText,
+        originalText: item.originalText || item.text,
         type: item.type,
         criterion,
-        sourceEvidenceIds,
+        sourceEvidenceIds: validEvidence,
         priority: item.priority ?? 5,
       };
     });

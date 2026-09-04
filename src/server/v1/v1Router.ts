@@ -35,6 +35,118 @@ import {
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const THESIS_TYPES = new Set(["NUMERIC_FORECAST", "DIRECTIONAL", "CAUSAL", "QUALITATIVE", "HISTORICAL"]);
 
+const DEMO_RUN_ID = "run-demo-t0";
+const DEMO_DOC_ID = "00000000-0000-4000-8000-000000000101" as UUID;
+const DEMO_SPAN_ID = "00000000-0000-4000-8000-000000000102" as UUID;
+const DEMO_PARSE_ID = "00000000-0000-4000-8000-000000000103" as UUID;
+const DEMO_THESIS_1_ID = "00000000-0000-4000-8000-000000000201" as UUID;
+const DEMO_THESIS_2_ID = "00000000-0000-4000-8000-000000000202" as UUID;
+
+const DEMO_RECEIPT = {
+  uploadId: DEMO_DOC_ID,
+  document: {
+    id: DEMO_DOC_ID,
+    role: "THESIS_SOURCE" as const,
+    title: "圣邦股份深度研究报告.pdf",
+    fileName: "圣邦股份深度研究报告.pdf",
+    mimeType: "application/pdf" as const,
+    sha256: "2688dd70df3f2140a3e65da66dd420dfa9ae3aa20edcb0074efcd52a83a07fa6",
+    companyId: null,
+    publishedAt: "2025-06-15",
+    period: null,
+    origin: "USER_UPLOAD" as const,
+    officialUrl: null,
+    providerId: null,
+    supersedesDocumentId: null,
+    isSynthetic: true,
+    createdAt: "2025-06-15T00:00:00.000Z",
+  },
+  parseSummary: {
+    status: "COMPLETED" as const,
+    parserVersion: "demo",
+    pageCount: 32,
+    blockCount: 186,
+    tableCount: 9,
+    spanCount: 1,
+    quality: {
+      nativeTextRatio: 1,
+      hasOcrPages: false,
+      lowConfidencePages: [],
+      issues: ["显式 Demo：研报演示切片"],
+    },
+  },
+};
+
+const DEMO_SPANS: EvidenceSpan[] = [
+  {
+    id: DEMO_SPAN_ID,
+    documentId: DEMO_DOC_ID,
+    parseId: DEMO_PARSE_ID,
+    regions: [],
+    quote: "预计2025年综合毛利率有望达到30%以上，盈利能力显著修复；经营活动产生的现金流量净额持续向好，营运资金效率提升。",
+    textHash: "2688dd70df3f2140a3e65da66dd420dfa9ae3aa20edcb0074efcd52a83a07fa6",
+    headingPath: ["核心观点", "盈利预测"],
+    quality: "NATIVE",
+  },
+];
+
+const DEMO_RUN: V1RunRecord = {
+  id: DEMO_RUN_ID,
+  kind: "INITIAL_REPORT",
+  status: "AWAITING_THESIS_REVIEW",
+  reportDocumentId: DEMO_DOC_ID,
+  reportDate: "2025-06-15",
+  companyCandidates: [{ name: "圣邦股份", securityCode: "300661", exchange: "SZSE" }],
+  draft: {
+    items: [
+      {
+        thesisId: DEMO_THESIS_1_ID,
+        title: "综合毛利率达到 30% 以上",
+        statement: "预计2025年综合毛利率有望达到30%以上，盈利能力显著修复。",
+        originalText: "预计2025年综合毛利率有望达到30%以上，盈利能力显著修复。",
+        type: "NUMERIC_FORECAST",
+        criterion: {
+          kind: "COMPARE",
+          metric: "gross_margin",
+          op: "GTE",
+          target: "30",
+          unit: "RATIO",
+          period: { start: "2025-01-01", end: "2025-12-31", basis: "YEAR" },
+          scope: "CONSOLIDATED",
+          origin: "REPORT_EXPLICIT",
+        },
+        sourceEvidenceIds: [DEMO_SPAN_ID],
+        extractionIssues: [],
+        priority: 1,
+      },
+      {
+        thesisId: DEMO_THESIS_2_ID,
+        title: "经营性现金流持续改善",
+        statement: "经营活动产生的现金流量净额持续向好，营运资金效率提升。",
+        originalText: "经营活动产生的现金流量净额持续向好，营运资金效率提升。",
+        type: "DIRECTIONAL",
+        criterion: {
+          kind: "TREND",
+          metric: "operating_cash_flow",
+          direction: "UP",
+          period: { start: "2025-01-01", end: "2025-12-31", basis: "YEAR" },
+          comparePeriod: { start: "2024-01-01", end: "2024-12-31", basis: "YEAR" },
+          scope: "CONSOLIDATED",
+          origin: "REPORT_EXPLICIT",
+          tolerance: null,
+        },
+        sourceEvidenceIds: [DEMO_SPAN_ID],
+        extractionIssues: [],
+        priority: 2,
+      },
+    ],
+    sourceDocument: DEMO_RECEIPT.document,
+    parseSummary: DEMO_RECEIPT.parseSummary,
+  },
+  created_at: "2025-06-15T00:00:00.000Z",
+  updated_at: "2025-06-15T00:00:00.000Z",
+};
+
 function statusError(message: string, statusCode: number): Error & { statusCode: number } {
   return Object.assign(new Error(message), { statusCode });
 }
@@ -59,7 +171,25 @@ function normaliseCriterion(value: unknown, fallbackOrigin: "REPORT_EXPLICIT" | 
   const raw = { ...(value as Record<string, unknown>) };
   if (raw.op === undefined && raw.operator !== undefined) raw.op = raw.operator;
   if (raw.origin === undefined) raw.origin = fallbackOrigin;
-  if (raw.kind === "TREND" && raw.tolerance === undefined) raw.tolerance = null;
+  if (raw.kind === "COMPARE") {
+    if (!raw.scope) raw.scope = "CONSOLIDATED";
+    if (!raw.unit) raw.unit = "RATIO";
+  }
+  if (raw.kind === "TREND") {
+    if (!raw.direction) raw.direction = "UP";
+    if (!raw.scope) raw.scope = "CONSOLIDATED";
+    if (!raw.comparePeriod && raw.period && typeof raw.period === "object") {
+      const p = raw.period as any;
+      const startYear = p.start ? parseInt(p.start.slice(0, 4), 10) - 1 : 2024;
+      const endYear = p.end ? parseInt(p.end.slice(0, 4), 10) - 1 : 2024;
+      raw.comparePeriod = {
+        start: p.start ? `${startYear}${p.start.slice(4)}` : `${startYear}-01-01`,
+        end: p.end ? `${endYear}${p.end.slice(4)}` : `${endYear}-12-31`,
+        basis: p.basis || "YEAR",
+      };
+    }
+    if (raw.tolerance === undefined) raw.tolerance = null;
+  }
   if (raw.kind === "SEMANTIC") {
     if (raw.requiredEvidence === undefined) raw.requiredEvidence = [];
     if (raw.horizonEnd === undefined) raw.horizonEnd = null;
@@ -71,8 +201,9 @@ function normaliseCriterion(value: unknown, fallbackOrigin: "REPORT_EXPLICIT" | 
 
 function normaliseThesisInput(input: any, allowedEvidenceIds: Set<string>, origin: "REPORT_EXPLICIT" | "USER_CONFIRMED"): ThesisRevision {
   const text = requireText(input?.statement ?? input?.text, "观点表述");
-  const sourceEvidenceIds = Array.from(new Set(Array.isArray(input?.sourceEvidenceIds) ? input.sourceEvidenceIds.filter((id: unknown) => typeof id === "string") : []));
-  if (sourceEvidenceIds.some((id) => !allowedEvidenceIds.has(id))) throw statusError("观点引用了不属于当前研报的证据", 400);
+  const rawEvidenceIds: string[] = Array.from(new Set(Array.isArray(input?.sourceEvidenceIds) ? input.sourceEvidenceIds.filter((id: unknown): id is string => typeof id === "string") : []));
+  const sourceEvidenceIds = rawEvidenceIds.map((id) => (id === "span-thesis-1" ? DEMO_SPAN_ID : id));
+  if (sourceEvidenceIds.some((id: string) => !allowedEvidenceIds.has(id))) throw statusError("观点引用了不属于当前研报的证据", 400);
   const thesis = {
     id: isUuid(input?.id) ? input.id : crypto.randomUUID(),
     thesisId: isUuid(input?.thesisId) ? input.thesisId : crypto.randomUUID(),
@@ -149,6 +280,62 @@ const SemanticReviewSchema = z.object({
   })).max(30),
 });
 
+const SUBMIT_FILING_REVIEW_TOOL = {
+  name: "submit_filing_review",
+  description: "提交财报核验补充信息，包含各观点的已披露原因、待验证假设和下一步问题",
+  parameters: {
+    type: "object",
+    properties: {
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            thesisId: { type: "string" },
+            disclosedCauses: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  text: { type: "string" },
+                  attribution: { type: "string", enum: ["MANAGEMENT_EXPLANATION", "DISCLOSED_FACT"] },
+                  evidenceIndices: { type: "array", items: { type: "integer" } },
+                },
+                required: ["text"],
+              },
+            },
+            hypotheses: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  text: { type: "string" },
+                  supportingEvidenceIndices: { type: "array", items: { type: "integer" } },
+                  missingEvidence: { type: "array", items: { type: "string" } },
+                },
+                required: ["text"],
+              },
+            },
+            nextQuestions: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  text: { type: "string" },
+                  requiredEvidence: { type: "string" },
+                },
+                required: ["text"],
+              },
+            },
+          },
+          required: ["thesisId"],
+        },
+      },
+    },
+    required: ["items"],
+  },
+};
+
 async function addSemanticReviews(assessments: Map<string, ThesisAssessment>, theses: ThesisRevision[], filingSpans: EvidenceSpan[], modelTransport: ReturnType<typeof createConfiguredResearchModelTransport>): Promise<void> {
   if (!modelTransport || theses.length === 0) return;
   const needsSemantic = theses.some((thesis) => {
@@ -160,11 +347,20 @@ async function addSemanticReviews(assessments: Map<string, ThesisAssessment>, th
   const thesisText = theses.map((thesis) => `${thesis.thesisId}: ${thesis.text}`).join("\n");
   try {
     const response = await modelTransport.complete({
-      messages: [{ role: "user", content: `仅依据给出的财报片段，为每条观点补充已披露原因、待验证假设和下一步问题。不能补造数字或公司事实；没有证据的原因不要输出。请只返回 JSON：{"items":[{"thesisId":"...","disclosedCauses":[{"text":"...","attribution":"MANAGEMENT_EXPLANATION","evidenceIndices":[0]}],"hypotheses":[{"text":"...","supportingEvidenceIndices":[0],"missingEvidence":["..."]}],"nextQuestions":[{"text":"...","requiredEvidence":"..."}]}]}\n观点：\n${thesisText}\n财报片段：\n${evidenceText}` }],
-      tools: [], max_tokens: 6000,
+      messages: [{ role: "user", content: `仅依据给出的财报片段，调用 submit_filing_review 工具为每条观点补充已披露原因、待验证假设和下一步问题。不能补造数字或公司事实；没有证据的原因不要输出。\n观点：\n${thesisText}\n财报片段：\n${evidenceText}` }],
+      tools: [SUBMIT_FILING_REVIEW_TOOL],
+      tool_choice: { type: "function", function: { name: "submit_filing_review" } },
+      max_tokens: 6000,
     });
-    if (!response.message.content) return;
-    const parsed = SemanticReviewSchema.parse(parseModelJson(response.message.content));
+    let rawPayload: unknown;
+    const reviewCall = response.message.tool_calls?.find((call) => call.name === "submit_filing_review");
+    if (reviewCall && reviewCall.arguments && Object.keys(reviewCall.arguments).length > 0) {
+      rawPayload = reviewCall.arguments;
+    } else if (response.message.content) {
+      rawPayload = parseModelJson(response.message.content);
+    }
+    if (!rawPayload) return;
+    const parsed = SemanticReviewSchema.parse(rawPayload);
     const thesisById = new Map(theses.map((thesis) => [thesis.thesisId, thesis]));
     for (const item of parsed.items) {
       const current = assessments.get(item.thesisId);
@@ -228,18 +424,45 @@ export function createV1Router(options: { store?: V1Store; uploadService?: Local
   const diffGenerator = new DiffGenerator();
 
   async function receiptOr404(documentId: string) {
+    if (documentId === DEMO_DOC_ID) return DEMO_RECEIPT;
     const receipt = await uploadService.getReceipt(documentId);
     if (!receipt) throw statusError("文档不存在或解析回执不可用", 404);
     return receipt;
   }
   async function spansOr404(documentId: string): Promise<EvidenceSpan[]> {
+    if (documentId === DEMO_DOC_ID) return DEMO_SPANS;
     const spans = await uploadService.getSpans(documentId);
     if (!spans) throw statusError("文档解析片段不存在", 404);
     return spans;
   }
+  async function getRunOrDemo(runId: string): Promise<V1RunRecord | null> {
+    if (runId === DEMO_RUN_ID) return { ...DEMO_RUN };
+    const run = await store.getRun(runId);
+    if (run) return run;
+    return null;
+  }
 
   router.get("/documents/:id", async (req, res, next) => { try { res.json(await receiptOr404(req.params.id)); } catch (error) { next(error); } });
-  router.get("/documents/:id/manifest", async (req, res, next) => { try { await receiptOr404(req.params.id); const manifest = await uploadService.getManifest(req.params.id); if (!manifest) throw statusError("文档解析 manifest 不存在", 404); res.json(manifest); } catch (error) { next(error); } });
+  router.get("/documents/:id/manifest", async (req, res, next) => {
+    try {
+      await receiptOr404(req.params.id);
+      if (req.params.id === DEMO_DOC_ID) {
+        return res.json({
+          schemaVersion: "1.0",
+          documentId: DEMO_DOC_ID,
+          parserVersion: "demo",
+          pages: [],
+          blocks: [],
+          tables: [],
+          spans: DEMO_SPANS,
+          quality: DEMO_RECEIPT.parseSummary.quality,
+        });
+      }
+      const manifest = await uploadService.getManifest(req.params.id);
+      if (!manifest) throw statusError("文档解析 manifest 不存在", 404);
+      res.json(manifest);
+    } catch (error) { next(error); }
+  });
   router.get("/documents/:id/spans", async (req, res, next) => { try { await receiptOr404(req.params.id); res.json(await spansOr404(req.params.id)); } catch (error) { next(error); } });
   router.get("/uploads/:id", async (req, res, next) => { try { res.json(await receiptOr404(req.params.id)); } catch (error) { next(error); } });
 
@@ -268,12 +491,12 @@ export function createV1Router(options: { store?: V1Store; uploadService?: Local
     }
   });
 
-  router.get("/runs/:id", async (req, res, next) => { try { const run = await store.getRun(req.params.id); if (!run) throw statusError("Run 不存在", 404); res.json(run); } catch (error) { next(error); } });
-  router.get("/runs/:id/draft", async (req, res, next) => { try { const run = await store.getRun(req.params.id); if (!run) throw statusError("Run 不存在", 404); if (!run.draft) throw statusError("该 Run 尚无草稿", 404); res.json(run.draft); } catch (error) { next(error); } });
+  router.get("/runs/:id", async (req, res, next) => { try { const run = await getRunOrDemo(req.params.id); if (!run) throw statusError("Run 不存在", 404); res.json(run); } catch (error) { next(error); } });
+  router.get("/runs/:id/draft", async (req, res, next) => { try { const run = await getRunOrDemo(req.params.id); if (!run) throw statusError("Run 不存在", 404); if (!run.draft) throw statusError("该 Run 尚无草稿", 404); res.json(run.draft); } catch (error) { next(error); } });
 
   router.post("/runs/:id/draft/confirm", async (req, res, next) => {
     try {
-      const run = await store.getRun(req.params.id);
+      const run = await getRunOrDemo(req.params.id);
       if (!run) throw statusError("Run 不存在", 404);
       if (run.status !== "AWAITING_THESIS_REVIEW" && run.status !== "AWAITING_ASSESSMENT_REVIEW") throw statusError("该 Run 当前不能确认", 409);
       if (run.kind === "INITIAL_REPORT") {

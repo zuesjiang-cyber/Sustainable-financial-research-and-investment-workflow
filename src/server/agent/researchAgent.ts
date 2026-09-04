@@ -256,7 +256,7 @@ export class ResearchAgent {
       answer: null,
     });
 
-    const disclosedCauses: CitedStatement[] = [];
+    const disclosedCauses: Array<CitedStatement & { attribution: "MANAGEMENT_EXPLANATION" | "DISCLOSED_FACT" }> = [];
     const hypotheses: any[] = [];
 
     if (observedGap) {

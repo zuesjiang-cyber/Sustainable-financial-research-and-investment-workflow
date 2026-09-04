@@ -340,7 +340,10 @@ export class OpenAICompatibleTransport implements ResearchModelTransport {
       }));
       requestBody.tool_choice = request.tool_choice === undefined ? "auto" : request.tool_choice;
     }
-    if (request.max_tokens !== undefined) requestBody.max_tokens = request.max_tokens;
+    if (request.max_tokens !== undefined) {
+      requestBody.max_tokens = request.max_tokens;
+      requestBody.max_completion_tokens = request.max_tokens;
+    }
 
     const response = await this.fetchImpl(endpoint, {
       method: "POST",

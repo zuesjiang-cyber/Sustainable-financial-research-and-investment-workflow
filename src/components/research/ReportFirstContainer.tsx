@@ -126,7 +126,12 @@ export const ReportFirstContainer: React.FC = () => {
       });
 
       if (!res.ok) {
-        throw new Error(`确认初始观点失败: ${res.statusText}`);
+        let errMessage = res.statusText;
+        try {
+          const errData = await res.json();
+          if (errData?.error) errMessage = errData.error;
+        } catch {}
+        throw new Error(`确认初始观点失败: ${errMessage}`);
       }
 
       const data = await res.json();
@@ -273,9 +278,10 @@ export const ReportFirstContainer: React.FC = () => {
     await new Promise((r) => setTimeout(r, 600));
 
     const demoDocId = "00000000-0000-4000-8000-000000000101";
+    const demoSpanId = "00000000-0000-4000-8000-000000000102";
     const demoTheses: ExtractedThesisItem[] = [
       {
-        thesisId: "thesis-gm-300661",
+        thesisId: "00000000-0000-4000-8000-000000000201",
         title: "综合毛利率达到 30% 以上",
         statement: "预计2025年综合毛利率有望达到30%以上，盈利能力显著修复。",
         type: "NUMERIC_FORECAST",
@@ -288,10 +294,10 @@ export const ReportFirstContainer: React.FC = () => {
           period: { start: "2025-01-01", end: "2025-12-31", basis: "YEAR" },
           scope: "CONSOLIDATED",
         },
-        sourceEvidenceIds: ["span-thesis-1"],
+        sourceEvidenceIds: [demoSpanId],
       },
       {
-        thesisId: "thesis-cf-300661",
+        thesisId: "00000000-0000-4000-8000-000000000202",
         title: "经营性现金流持续改善",
         statement: "经营活动产生的现金流量净额持续向好，营运资金效率提升。",
         type: "DIRECTIONAL",
@@ -301,7 +307,7 @@ export const ReportFirstContainer: React.FC = () => {
           period: { start: "2025-01-01", end: "2025-12-31", basis: "YEAR" },
           scope: "CONSOLIDATED",
         },
-        sourceEvidenceIds: ["span-thesis-1"],
+        sourceEvidenceIds: [demoSpanId],
       },
     ];
 
