@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import type { EvidenceSpan, UUID } from "../../shared/domain";
@@ -73,7 +74,16 @@ export class PdfParserClient {
     pythonBin?: string,
     parserScript?: string
   ) {
-    this.pythonBin = pythonBin || path.resolve(".venv/bin/python");
+    // The repository may be run from a fresh local checkout, a container, or
+    // the Codex runtime.  Prefer an explicitly configured interpreter, then a
+    // project virtualenv when it exists; falling back to the runtime/system
+    // Python keeps real uploads usable without requiring a repository-local
+    // .venv (the parser only needs the documented Python dependencies).
+    this.pythonBin = pythonBin
+      || process.env.FINTRUST_PYTHON_BIN
+      || (existsSync(path.resolve(".venv/bin/python")) ? path.resolve(".venv/bin/python") : undefined)
+      || process.env.CODEX_PRIMARY_RUNTIME_PYTHON
+      || "python3";
     this.parserScript = parserScript || path.resolve("python/document_parser/parser.py");
   }
 

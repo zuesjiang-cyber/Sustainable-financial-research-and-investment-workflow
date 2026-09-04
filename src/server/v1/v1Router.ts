@@ -5,14 +5,15 @@ import { z } from "zod";
 import { V1Store, type V1ProjectRecord, type V1RunRecord } from "./v1Store";
 import { LocalUploadService } from "../documents/uploadService";
 import { ThesisExtractor } from "../documents/thesisExtractor";
-import { FactExtractor } from "../facts/factExtractor";
 import { MetricRegistry } from "../facts/metricRegistry";
 import { ResearchAgent } from "../agent/researchAgent";
 import { DiffGenerator } from "../memory/diffGenerator";
-import { createConfiguredResearchModelTransport } from "../researchModel";
+import { MarkdownMemoryStore } from "../memory/markdownMemoryStore";
+import { configuredMaxOutputTokens, createConfiguredResearchModelTransport, DEFAULT_OPENAI_MODEL, type ResearchModelTransport } from "../researchModel";
 import {
   ConditionSchema,
   DraftSchema,
+  FactSchema,
   PeriodSchema,
   ResearchStateSchema,
   SourceManifestSchema,
@@ -203,7 +204,7 @@ function normaliseThesisInput(input: any, allowedEvidenceIds: Set<string>, origi
   const text = requireText(input?.statement ?? input?.text, "观点表述");
   const rawEvidenceIds: string[] = Array.from(new Set(Array.isArray(input?.sourceEvidenceIds) ? input.sourceEvidenceIds.filter((id: unknown): id is string => typeof id === "string") : []));
   const sourceEvidenceIds = rawEvidenceIds.map((id) => (id === "span-thesis-1" ? DEMO_SPAN_ID : id));
-  if (sourceEvidenceIds.some((id: string) => !allowedEvidenceIds.has(id))) throw statusError("观点引用了不属于当前研报的证据", 400);
+  if (sourceEvidenceIds.some((id): boolean => !allowedEvidenceIds.has(id))) throw statusError("观点引用了不属于当前研报的证据", 400);
   const thesis = {
     id: isUuid(input?.id) ? input.id : crypto.randomUUID(),
     thesisId: isUuid(input?.thesisId) ? input.thesisId : crypto.randomUUID(),
@@ -228,7 +229,8 @@ function requiredMetrics(theses: ThesisRevision[]): string[] {
       if (condition.metric === "gross_margin") {
         metrics.add("revenue");
         metrics.add("cost_of_revenue");
-      } else metrics.add(condition.metric);
+      } else if (condition.metric === "revenue_growth") metrics.add("revenue");
+      else metrics.add(condition.metric);
     } else if (condition.kind === "ALL" || condition.kind === "ANY") condition.children.forEach(visit);
   };
   theses.forEach((thesis) => visit(thesis.criterion));
@@ -263,49 +265,126 @@ function parseModelJson(content: string): unknown {
   try { return JSON.parse((fenced ? fenced[1] : content).trim()); } catch { throw new Error("Ling 返回内容不是合法 JSON"); }
 }
 
+function parseLingNumber(value: string | null, explicitUnit = ""): { value: string; unit: string } | null {
+  if (!value || !value.trim()) return null;
+  const match = value.replace(/,/g, "").match(/[+-]?(?:\d+(?:\.\d+)?|\.\d+)/);
+  if (!match) return null;
+  let number = new Decimal(match[0]);
+  const unit = `${value} ${explicitUnit}`.match(/亿元|万元|元/)?.[0] || "元";
+  if (unit === "亿元") number = number.times(100_000_000);
+  if (unit === "万元") number = number.times(10_000);
+  return { value: number.toString(), unit };
+}
+
+function previousPeriod(period: z.infer<typeof PeriodSchema>): z.infer<typeof PeriodSchema> {
+  const shift = (value: string | null) => {
+    if (!value) return null;
+    const date = new Date(`${value}T00:00:00Z`);
+    if (Number.isNaN(date.getTime())) return null;
+    date.setUTCFullYear(date.getUTCFullYear() - 1);
+    return date.toISOString().slice(0, 10);
+  };
+  return { start: shift(period.start), end: shift(period.end) || period.end, basis: period.basis };
+}
+
 function evidenceIdsFromModel(item: any, spans: EvidenceSpan[]): UUID[] {
   const ids: string[] = [];
   const indices = Array.isArray(item?.evidenceIndices) ? item.evidenceIndices : Array.isArray(item?.spanIndices) ? item.spanIndices : [];
-  for (const index of indices) if (Number.isInteger(index) && spans[index]) ids.push(spans[index].id);
-  if (Array.isArray(item?.evidenceIds)) for (const id of item.evidenceIds) if (spans.some((span) => span.id === id)) ids.push(id);
+  for (const index of indices) {
+    if (!Number.isInteger(index) || index < 0 || !spans[index]) throw new Error(`Ling 返回了无效证据索引 ${String(index)}`);
+    ids.push(spans[index].id);
+  }
+  if (Array.isArray(item?.evidenceIds)) for (const id of item.evidenceIds) {
+    if (!spans.some((span) => span.id === id)) throw new Error(`Ling 返回了不属于当前财报的证据 ${String(id)}`);
+    ids.push(id);
+  }
   return [...new Set(ids)];
 }
 
 const SemanticReviewSchema = z.object({
   items: z.array(z.object({
     thesisId: z.string(),
-    disclosedCauses: z.array(z.object({ text: z.string().trim().min(1), attribution: z.enum(["MANAGEMENT_EXPLANATION", "DISCLOSED_FACT"]).default("DISCLOSED_FACT"), evidenceIndices: z.array(z.number().int().nonnegative()).default([]), evidenceIds: z.array(z.string()).default([]) })).default([]),
-    hypotheses: z.array(z.object({ text: z.string().trim().min(1), supportingEvidenceIds: z.array(z.string()).default([]), supportingEvidenceIndices: z.array(z.number().int().nonnegative()).default([]), missingEvidence: z.array(z.string()).default([]) })).default([]),
-    nextQuestions: z.array(z.object({ text: z.string().trim().min(1), requiredEvidence: z.string().default("相关定期财务报表及附注") })).default([]),
-  })).max(30),
-});
+    status: z.enum(["SUPPORTED", "PARTIALLY_SUPPORTED", "WEAKENED", "UNRESOLVED"]).optional(),
+    maturity: z.enum(["NOT_DUE", "IN_PROGRESS", "DUE"]).optional(),
+    interimSignal: z.enum(["ABOVE", "ON_TRACK", "BELOW", "UNKNOWN"]).optional(),
+    summary: z.string().trim().min(1).optional(),
+    evidenceIndices: z.array(z.number().int().nonnegative()).default([]),
+    facts: z.array(z.object({
+      metric: z.string().trim().min(1),
+      labelOriginal: z.string().trim().min(1).optional(),
+      value: z.string().nullable().default(null),
+      previousValue: z.string().nullable().default(null),
+      originalUnit: z.string().trim().default("元"),
+      evidenceIndices: z.array(z.number().int().nonnegative()).default([]),
+    }).strict()).default([]),
+    observedGap: z.object({
+      text: z.string().trim().min(1),
+      evidenceIndices: z.array(z.number().int().nonnegative()).default([]),
+    }).strict().nullable().optional(),
+    disclosedCauses: z.array(z.object({ text: z.string().trim().min(1), attribution: z.enum(["MANAGEMENT_EXPLANATION", "DISCLOSED_FACT"]).default("DISCLOSED_FACT"), evidenceIndices: z.array(z.number().int().nonnegative()).default([]), evidenceIds: z.array(z.string()).default([]) }).strict()).default([]),
+    hypotheses: z.array(z.object({ text: z.string().trim().min(1), supportingEvidenceIds: z.array(z.string()).default([]), supportingEvidenceIndices: z.array(z.number().int().nonnegative()).default([]), missingEvidence: z.array(z.string()).default([]) }).strict()).default([]),
+    nextQuestions: z.array(z.object({ text: z.string().trim().min(1), requiredEvidence: z.string().default("相关定期财务报表及附注") }).strict()).default([]),
+  }).strict()).max(30),
+}).strict();
 
 const SUBMIT_FILING_REVIEW_TOOL = {
   name: "submit_filing_review",
-  description: "提交财报核验补充信息，包含各观点的已披露原因、待验证假设和下一步问题",
+  description: "提交财报核验结果，包含各观点的状态、财务事实、证据位置索引、实际与目标差距、披露原因及后续问题",
   parameters: {
     type: "object",
     properties: {
       items: {
         type: "array",
+        description: "每条观点的核验详情列表",
         items: {
           type: "object",
           properties: {
-            thesisId: { type: "string" },
-            disclosedCauses: {
+            thesisId: { type: "string", description: "原样沿用的观点 thesisId" },
+            status: { type: "string", enum: ["SUPPORTED", "PARTIALLY_SUPPORTED", "WEAKENED", "UNRESOLVED"], description: "观点核验状态" },
+            maturity: { type: "string", enum: ["DUE", "IN_PROGRESS", "NOT_DUE"], description: "验证周期到期状态" },
+            interimSignal: { type: "string", enum: ["ABOVE", "ON_TRACK", "BELOW", "UNKNOWN"], description: "中报/季报期间信号" },
+            summary: { type: "string", description: "核验判定总结" },
+            evidenceIndices: { type: "array", items: { type: "integer" }, description: "指向 [SPAN_n] 的编号" },
+            facts: {
               type: "array",
+              description: "从财报抽取的关键财务事实",
               items: {
                 type: "object",
                 properties: {
-                  text: { type: "string" },
+                  metric: { type: "string", description: "指标名如 revenue, cost_of_revenue 等" },
+                  labelOriginal: { type: "string", description: "财报原始科目名称" },
+                  value: { type: ["string", "null"], description: "本期数字，保留单位如 123.4亿元 或 null" },
+                  previousValue: { type: ["string", "null"], description: "上年同期数字，保留单位或 null" },
+                  originalUnit: { type: "string", description: "原始单位如 亿元、万元、元" },
+                  evidenceIndices: { type: "array", items: { type: "integer" }, description: "指向 [SPAN_n] 的编号" },
+                },
+                required: ["metric", "evidenceIndices"],
+              },
+            },
+            observedGap: {
+              type: "object",
+              description: "实际值 vs 目标值及差额，无法计算时填 null",
+              properties: {
+                text: { type: "string", description: "实际值 vs 目标值及差额描述" },
+                evidenceIndices: { type: "array", items: { type: "integer" } },
+              },
+            },
+            disclosedCauses: {
+              type: "array",
+              description: "管理层披露的原因",
+              items: {
+                type: "object",
+                properties: {
+                  text: { type: "string", description: "原因陈述" },
                   attribution: { type: "string", enum: ["MANAGEMENT_EXPLANATION", "DISCLOSED_FACT"] },
                   evidenceIndices: { type: "array", items: { type: "integer" } },
                 },
-                required: ["text"],
+                required: ["text", "evidenceIndices"],
               },
             },
             hypotheses: {
               type: "array",
+              description: "待验证假设",
               items: {
                 type: "object",
                 properties: {
@@ -313,11 +392,12 @@ const SUBMIT_FILING_REVIEW_TOOL = {
                   supportingEvidenceIndices: { type: "array", items: { type: "integer" } },
                   missingEvidence: { type: "array", items: { type: "string" } },
                 },
-                required: ["text"],
+                required: ["text", "supportingEvidenceIndices", "missingEvidence"],
               },
             },
             nextQuestions: {
               type: "array",
+              description: "下一步跟踪问题",
               items: {
                 type: "object",
                 properties: {
@@ -336,21 +416,98 @@ const SUBMIT_FILING_REVIEW_TOOL = {
   },
 };
 
-async function addSemanticReviews(assessments: Map<string, ThesisAssessment>, theses: ThesisRevision[], filingSpans: EvidenceSpan[], modelTransport: ReturnType<typeof createConfiguredResearchModelTransport>): Promise<void> {
-  if (!modelTransport || theses.length === 0) return;
-  const needsSemantic = theses.some((thesis) => {
-    const assessment = assessments.get(thesis.thesisId);
-    return thesis.type === "CAUSAL" || thesis.type === "QUALITATIVE" || Boolean(assessment && ["WEAKENED", "PARTIALLY_SUPPORTED", "UNRESOLVED"].includes(assessment.status));
-  });
-  if (!needsSemantic) return;
-  const evidenceText = filingSpans.filter((span) => span.quote.trim()).slice(0, 40).map((span, index) => `[SPAN_${index}] ${span.quote.slice(0, 700)}`).join("\n");
-  const thesisText = theses.map((thesis) => `${thesis.thesisId}: ${thesis.text}`).join("\n");
+async function addSemanticReviews(
+  assessments: Map<string, ThesisAssessment>,
+  theses: ThesisRevision[],
+  filingSpans: EvidenceSpan[],
+  facts: Fact[],
+  modelTransport: ReturnType<typeof createConfiguredResearchModelTransport>,
+  memoryContext: string,
+  filing: { projectId: UUID; documentId: UUID; period: z.infer<typeof PeriodSchema>; publishedAt: string; scope: "CONSOLIDATED" | "PARENT" },
+): Promise<void> {
+  if (theses.length === 0) return;
+  if (!modelTransport) throw statusError("指定 Ling 模型未配置，无法进行财报核验", 503);
+  // Keep the exact span list used in the prompt so model indices resolve to
+  // the same evidence IDs. Rank likely financial statements and MD&A reason
+  // disclosures first; simply taking the first PDF spans often misses the
+  // explanation section near the end of a filing.
+  const metricKeywords = new Set<string>(["财务", "管理层讨论", "原因", "影响", "由于", "得益", "拖累"]);
+  for (const thesis of theses) {
+    const metric = thesis.criterion.kind === "COMPARE" || thesis.criterion.kind === "TREND" ? thesis.criterion.metric : "";
+    if (metric === "revenue" || metric === "revenue_growth") ["营业收入", "主营业务收入", "收入"].forEach((term) => metricKeywords.add(term));
+    if (metric === "cost_of_revenue") ["营业成本", "主营业务成本", "成本"].forEach((term) => metricKeywords.add(term));
+    if (metric === "operating_cash_flow") ["经营活动产生的现金流量净额", "经营活动现金流量净额", "经营现金流"].forEach((term) => metricKeywords.add(term));
+    if (metric === "gross_margin") ["毛利率", "毛利", "营业收入", "营业成本"].forEach((term) => metricKeywords.add(term));
+  }
+  const rankedSemanticSpans = filingSpans
+    .map((span, index) => {
+      const text = `${span.headingPath.join(" ")} ${span.quote}`;
+      const metricScore = [...metricKeywords].filter((term) => text.includes(term)).length;
+      const reasonScore = /(管理层讨论|经营情况讨论|原因|主要由于|主要受|影响|得益|拖累|驱动|解释|展望|风险)/.test(text) ? 4 : 0;
+      const statementScore = /(利润表|现金流量表|资产负债表|财务报表|主要会计数据|财务指标)/.test(text) ? 3 : 0;
+      return { span, index, score: metricScore * 3 + reasonScore + statementScore };
+    })
+    .filter(({ span }) => span.quote.trim())
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .slice(0, 40);
+  let semanticChars = 0;
+  const semanticSpans = rankedSemanticSpans.filter(({ span }) => {
+    const length = Math.min(span.quote.length, 700) + 40;
+    if (semanticChars >= 18_000) return false;
+    semanticChars += length;
+    return true;
+  }).map(({ span }) => span);
+  const evidenceText = semanticSpans.map((span, index) => `[SPAN_${index}] ${span.quote.slice(0, 700)}`).join("\n");
+  const thesisText = theses.map((thesis) => JSON.stringify({ thesisId: thesis.thesisId, statement: thesis.text, criterion: thesis.criterion })).join("\n");
+  const seenThesisIds = new Set<string>();
+  const factByKey = new Map<string, Fact>();
+  const persistFact = (raw: z.infer<typeof SemanticReviewSchema>["items"][number]["facts"][number], value: string, factPeriod: z.infer<typeof PeriodSchema>, evidenceIds: UUID[]): Fact | null => {
+    const parsed = parseLingNumber(value, raw.originalUnit);
+    if (!parsed || evidenceIds.length === 0) return null;
+    const key = `${raw.metric}:${factPeriod.end}:${parsed.value}:${filing.scope}`;
+    const existing = factByKey.get(key);
+    if (existing) return existing;
+    const fact: Fact = {
+      id: crypto.randomUUID(),
+      documentId: filing.documentId,
+      companyId: filing.projectId,
+      metric: raw.metric,
+      labelOriginal: raw.labelOriginal || raw.metric,
+      segment: null,
+      period: factPeriod,
+      accountingStandard: "CAS",
+      scope: filing.scope,
+      nature: "ACTUAL",
+      value: parsed.value,
+      unit: "CURRENCY",
+      currency: "CNY",
+      customUnit: null,
+      originalValue: value,
+      originalUnit: raw.originalUnit || parsed.unit,
+      scale: parsed.unit === "亿元" ? "100000000" : parsed.unit === "万元" ? "10000" : "1",
+      publishedAt: filing.publishedAt,
+      restatementKey: `ling:${raw.metric}:${factPeriod.end}`,
+      evidenceIds,
+      extractionVersion: "ling-3.0-flash-fin-v1",
+    };
+    factByKey.set(key, fact);
+    facts.push(fact);
+    return fact;
+  };
   try {
     const response = await modelTransport.complete({
-      messages: [{ role: "user", content: `仅依据给出的财报片段，调用 submit_filing_review 工具为每条观点补充已披露原因、待验证假设和下一步问题。不能补造数字或公司事实；没有证据的原因不要输出。\n观点：\n${thesisText}\n财报片段：\n${evidenceText}` }],
+      messages: [{ role: "user", content: [
+        "你是财报核验器。请调用 submit_filing_review 工具提交核验结果。仅依据下面的真实财报片段，为每条观点抽取事实并返回核验结果，原样沿用 thesisId。你负责识别正确表格行、当前期与可比期、单位和口径，再判断状态、maturity、实际与目标差距、已披露原因、待验证假设和下一步问题。没有直接证据必须 UNRESOLVED；没有披露原因则 disclosedCauses 为空；不能补造数字或公司事实。所有 evidenceIndices 必须指向下面 [SPAN_n] 的编号。",
+        "上一轮已确认 Research Memory（只用于沿用 thesisId、用户判断和未决问题，不得当作本期事实）：",
+        memoryContext,
+        `用户确认的本期元数据：${JSON.stringify({ period: filing.period, publishedAt: filing.publishedAt, scope: filing.scope })}`,
+        "facts 中 value/previousValue 必须保留财报披露的数字和单位，例如 123.4亿元；找不到就填 null。observedGap.text 要明确写实际值、目标值和差额；不能计算时填 null。",
+        `观点：\n${thesisText}`,
+        `财报片段：\n${evidenceText}`,
+      ].join("\n") }],
       tools: [SUBMIT_FILING_REVIEW_TOOL],
       tool_choice: { type: "function", function: { name: "submit_filing_review" } },
-      max_tokens: 6000,
+      max_tokens: configuredMaxOutputTokens(),
     });
     let rawPayload: unknown;
     const reviewCall = response.message.tool_calls?.find((call) => call.name === "submit_filing_review");
@@ -359,22 +516,78 @@ async function addSemanticReviews(assessments: Map<string, ThesisAssessment>, th
     } else if (response.message.content) {
       rawPayload = parseModelJson(response.message.content);
     }
-    if (!rawPayload) return;
+    if (!rawPayload) throw new Error("Ling 未返回财报核验 tool_call 或 JSON");
     const parsed = SemanticReviewSchema.parse(rawPayload);
     const thesisById = new Map(theses.map((thesis) => [thesis.thesisId, thesis]));
     for (const item of parsed.items) {
       const current = assessments.get(item.thesisId);
-      if (!current || !thesisById.has(item.thesisId)) continue;
+      if (!current || !thesisById.has(item.thesisId)) throw new Error(`Ling 返回了未知 thesisId ${item.thesisId}`);
+      if (seenThesisIds.has(item.thesisId)) throw new Error(`Ling 重复返回 thesisId ${item.thesisId}`);
+      seenThesisIds.add(item.thesisId);
+      const semanticEvidenceIds = [...new Set([
+        ...evidenceIdsFromModel(item, semanticSpans),
+        ...item.facts.flatMap((fact) => evidenceIdsFromModel(fact, semanticSpans)),
+      ])];
+      const itemFacts = item.facts.flatMap((raw) => {
+        const evidenceIds = evidenceIdsFromModel(raw, semanticSpans);
+        const extracted: Fact[] = [];
+        if (raw.value) {
+          const fact = persistFact(raw, raw.value, filing.period, evidenceIds);
+          if (fact) extracted.push(fact);
+        }
+        if (raw.previousValue) {
+          const fact = persistFact(raw, raw.previousValue, previousPeriod(filing.period), evidenceIds);
+          if (fact) extracted.push(fact);
+        }
+        return extracted;
+      });
       const disclosedCauses = item.disclosedCauses.flatMap((cause) => {
-        const evidenceIds = evidenceIdsFromModel(cause, filingSpans);
+        const evidenceIds = evidenceIdsFromModel(cause, semanticSpans);
         return evidenceIds.length ? [{ text: cause.text, evidenceIds, factIds: current.factIds, calculationIds: current.calculationIds, attribution: cause.attribution }] : [];
       });
-      const hypotheses = item.hypotheses.map((hypothesis) => ({ text: hypothesis.text, supportingEvidenceIds: [...new Set([...hypothesis.supportingEvidenceIds.filter((id) => filingSpans.some((span) => span.id === id)), ...hypothesis.supportingEvidenceIndices.map((index) => filingSpans[index]?.id).filter((id): id is UUID => Boolean(id))])], missingEvidence: hypothesis.missingEvidence }));
+      const hypotheses = item.hypotheses.map((hypothesis) => ({ text: hypothesis.text, supportingEvidenceIds: [...new Set([
+        ...hypothesis.supportingEvidenceIds.map((id) => {
+          if (!semanticSpans.some((span) => span.id === id)) throw new Error(`Ling 返回了不属于当前财报的假设证据 ${id}`);
+          return id;
+        }),
+        ...hypothesis.supportingEvidenceIndices.map((index) => {
+          if (!semanticSpans[index]) throw new Error(`Ling 返回了无效假设证据索引 ${index}`);
+          return semanticSpans[index].id;
+        }),
+      ])], missingEvidence: hypothesis.missingEvidence }));
       const nextQuestions = item.nextQuestions.map((question) => ({ id: crypto.randomUUID(), thesisId: item.thesisId, text: question.text, requiredEvidence: question.requiredEvidence, triggerPeriod: null, status: "OPEN" as const, answer: null }));
-      assessments.set(item.thesisId, ThesisAssessmentSchema.parse({ ...current, disclosedCauses, hypotheses, nextQuestions: nextQuestions.length ? nextQuestions : current.nextQuestions }));
+      // A status/summary without a cited span is not an evidence-backed
+      // semantic judgment. Preserve the deterministic baseline in that case.
+      const hasSemanticEvidence = semanticEvidenceIds.length > 0;
+      const semanticStatus = item.status && hasSemanticEvidence ? item.status : "UNRESOLVED";
+      const semanticMaturity = item.maturity && hasSemanticEvidence ? item.maturity : current.maturity;
+      const semanticSignal = item.interimSignal && hasSemanticEvidence ? item.interimSignal : current.interimSignal;
+      const semanticSummary = item.summary && hasSemanticEvidence ? item.summary : current.summary;
+      const mergedEvidenceIds = [...new Set([...current.evidenceIds, ...semanticEvidenceIds])];
+      const observedGapEvidenceIds = item.observedGap ? evidenceIdsFromModel(item.observedGap, semanticSpans) : [];
+      const observedGap = item.observedGap && observedGapEvidenceIds.length
+        ? { text: item.observedGap.text, evidenceIds: observedGapEvidenceIds, factIds: itemFacts.map((fact) => fact.id), calculationIds: [] }
+        : current.observedGap;
+      assessments.set(item.thesisId, ThesisAssessmentSchema.parse({
+        ...current,
+        // A model response without a cited cause must not erase the explicit
+        // evidence-backed "not disclosed" note produced by the deterministic
+        // verifier.
+        disclosedCauses: disclosedCauses.length ? disclosedCauses : current.disclosedCauses,
+        hypotheses: hypotheses.length ? hypotheses : current.hypotheses,
+        nextQuestions: nextQuestions.length ? nextQuestions : current.nextQuestions,
+        status: semanticStatus,
+        maturity: semanticMaturity,
+        interimSignal: semanticSignal,
+        summary: semanticSummary,
+        factIds: [...new Set([...current.factIds, ...itemFacts.map((fact) => fact.id)])],
+        evidenceIds: mergedEvidenceIds,
+        observedGap,
+        conditions: current.conditions.map((condition) => ({ ...condition, result: semanticStatus === "SUPPORTED" ? "MET" : semanticStatus === "WEAKENED" ? "NOT_MET" : condition.result, reason: semanticSummary, evidenceIds: mergedEvidenceIds })),
+      }));
     }
-  } catch {
-    // Semantic reasons are optional; never substitute unreferenced or sample data.
+  } catch (error) {
+    console.warn("[v1Router] Ling 财报语义核验未成功，保留确定性基准核验:", error instanceof Error ? error.message : error);
   }
 }
 
@@ -403,6 +616,10 @@ function buildCalculations(theses: ThesisRevision[], assessments: Map<string, Th
         const cost = operands.find((fact) => fact.metric === "cost_of_revenue");
         if (!revenue || !cost) continue;
         execution = registry.computeGrossMargin(revenue, cost);
+      } else if (thesis.criterion.kind === "COMPARE" && thesis.criterion.metric === "revenue_growth") {
+        const revenues = operands.filter((fact) => fact.metric === "revenue").sort((a, b) => b.period.end.localeCompare(a.period.end));
+        if (revenues.length < 2) continue;
+        execution = registry.computeYoYGrowth(revenues[0], revenues[1]);
       } else if (thesis.criterion.kind === "COMPARE" && operands.length > 0) {
         const target = new Decimal(thesis.criterion.target);
         const normalizedTarget = thesis.criterion.unit === "RATIO" && target.greaterThan(1) ? target.dividedBy(100) : target;
@@ -414,14 +631,27 @@ function buildCalculations(theses: ThesisRevision[], assessments: Map<string, Th
   return results;
 }
 
-export function createV1Router(options: { store?: V1Store; uploadService?: LocalUploadService } = {}): Router {
+export function createV1Router(options: { store?: V1Store; uploadService?: LocalUploadService; modelTransport?: ResearchModelTransport | null; memoryStore?: MarkdownMemoryStore } = {}): Router {
   const router = Router();
   const store = options.store || new V1Store();
   const uploadService = options.uploadService || new LocalUploadService();
   const thesisExtractor = new ThesisExtractor();
-  const factExtractor = new FactExtractor();
   const researchAgent = new ResearchAgent(new MetricRegistry());
   const diffGenerator = new DiffGenerator();
+  const memoryStore = options.memoryStore || new MarkdownMemoryStore();
+  let configuredTransport: ResearchModelTransport | null | undefined = options.modelTransport;
+  const modelTransport = (): ResearchModelTransport | null => {
+    if (configuredTransport !== undefined) return configuredTransport;
+    try { configuredTransport = createConfiguredResearchModelTransport(); } catch { configuredTransport = null; }
+    return configuredTransport;
+  };
+  const requireLing = (): ResearchModelTransport => {
+    const transport = modelTransport();
+    if (!transport || transport.provider !== "openai_compatible" || transport.model !== DEFAULT_OPENAI_MODEL) {
+      throw statusError(`指定 Ling 模型未配置。请配置 FINTRUST_LLM_API_KEY，并使用 ${DEFAULT_OPENAI_MODEL}；不使用规则或 Gemini 降级`, 503);
+    }
+    return transport;
+  };
 
   async function receiptOr404(documentId: string) {
     if (documentId === DEMO_DOC_ID) return DEMO_RECEIPT;
@@ -477,9 +707,7 @@ export function createV1Router(options: { store?: V1Store; uploadService?: Local
       if (receipt.document.role !== "THESIS_SOURCE") throw statusError("该文档不是研报来源文档", 400);
       const spans = await spansOr404(reportDocumentId);
       if (!spans.length) throw statusError("研报解析切片为空，请确认文件是否正确解析", 400);
-      let transport: ReturnType<typeof createConfiguredResearchModelTransport> = null;
-      try { transport = createConfiguredResearchModelTransport(); } catch { transport = null; }
-      const extracted = await thesisExtractor.extractTheses(spans, transport || undefined);
+      const extracted = await thesisExtractor.extractTheses(spans, requireLing());
       if (!extracted.theses.length) throw statusError("研报未提取出可核验观点，请修改研报或配置 Ling 后重试", 422);
       const items = extracted.theses.map((thesis) => ({ thesisId: thesis.id, title: thesis.text.slice(0, 80), statement: thesis.text, originalText: thesis.originalText, type: thesis.type, criterion: thesis.criterion, sourceEvidenceIds: thesis.sourceEvidenceIds, extractionIssues: [], priority: thesis.priority }));
       const run: V1RunRecord = { id: runId, kind: "INITIAL_REPORT", status: "AWAITING_THESIS_REVIEW", reportDocumentId, reportDate: extracted.identification.reportDate, companyCandidates: extracted.identification.candidates.length ? extracted.identification.candidates : extracted.identification.identifiedCompany ? [extracted.identification.identifiedCompany] : [], draft: { items, sourceDocument: receipt.document, parseSummary: receipt.parseSummary }, created_at: createdAt, updated_at: createdAt };
@@ -517,6 +745,7 @@ export function createV1Router(options: { store?: V1Store; uploadService?: Local
         const sourceManifest = sourceManifestFor(run.reportDate || now, [{ documentId: receipt.document.id, sha256: receipt.document.sha256, purpose: "研报原件" }], null);
         const state = ResearchStateSchema.parse({ schemaVersion: "1.0", projectId, version: 0, updateId: crypto.randomUUID(), confirmedAt: now, items, questions: items.flatMap((item) => item.assessment.nextQuestions), method: { version: 1, focusMetrics: [], aliases: {}, focusQuestions: [], preferences: [] }, sourceManifest });
         const project: V1ProjectRecord = { id: projectId, company: { name: companyName, securityCode, exchange }, current_version: "T0", created_at: now, updated_at: now, theses: revisions.map((thesis) => ({ thesisId: thesis.thesisId, title: thesis.text.slice(0, 80), statement: thesis.text, type: thesis.type, criterion: thesis.criterion, sourceEvidenceIds: thesis.sourceEvidenceIds, userJudgment: null })), documents: [{ id: receipt.document.id, role: receipt.document.role, fileName: receipt.document.fileName, sha256: receipt.document.sha256, period: receipt.document.period, publishedAt: receipt.document.publishedAt }], currentState: state, history: [{ version: "T0", confirmedAt: now, state, diffSummary: "初建项目，确认初始观点", corrections: [] }], corrections: [] };
+        await memoryStore.saveProject(project as any);
         await store.saveProject(project);
         await store.saveRun({ ...run, status: "COMPLETED", projectId, draft: { ...(run.draft || {}), confirmedTheses: revisions }, updated_at: now });
         return res.json({ projectId, version: "T0", status: "COMPLETED", project, state });
@@ -524,7 +753,7 @@ export function createV1Router(options: { store?: V1Store; uploadService?: Local
 
       const targetProjectId = isUuid(req.body?.projectId) ? req.body.projectId : run.projectId;
       if (!targetProjectId) throw statusError("缺少 projectId", 400);
-      const project = await store.getProject(targetProjectId);
+      const project = await memoryStore.getProject(targetProjectId) as V1ProjectRecord | null;
       if (!project) throw statusError("项目不存在", 404);
       const draft = run.draft as Draft | undefined;
       if (!draft?.items) throw statusError("Run 草稿不存在", 409);
@@ -551,8 +780,15 @@ export function createV1Router(options: { store?: V1Store; uploadService?: Local
           if (nextText !== oldThesis.text) corrections.push(UserCorrectionSchema.parse({ id: crypto.randomUUID(), thesisId: oldThesis.thesisId, type: "THESIS_TEXT", action: "SET", before: oldThesis.text, after: nextText, reason: "用户在核验草稿中修正观点表述", baseStateVersion: project.currentState.version, createdAt: new Date().toISOString() }));
           if (edit.criterion !== undefined) corrections.push(UserCorrectionSchema.parse({ id: crypto.randomUUID(), thesisId: oldThesis.thesisId, type: "CRITERION", action: "SET", before: oldThesis.criterion, after: nextCriterion, reason: "用户在核验草稿中修正核验条件", baseStateVersion: project.currentState.version, createdAt: new Date().toISOString() }));
         }
-        const judgment = userJudgments[oldThesis.thesisId] ?? edit?.userJudgment ?? item.userJudgment ?? null;
-        if (judgment !== null && judgment !== item.userJudgment) corrections.push(UserCorrectionSchema.parse({ id: crypto.randomUUID(), thesisId: oldThesis.thesisId, type: "USER_JUDGMENT", action: "SET", before: item.userJudgment, after: String(judgment), reason: "用户保存本轮独立判断", baseStateVersion: project.currentState.version, createdAt: new Date().toISOString() }));
+        const previousJudgment = typeof item.userJudgment === "string" && item.userJudgment.trim() ? item.userJudgment : null;
+        const rawJudgment = userJudgments[oldThesis.thesisId] ?? edit?.userJudgment ?? previousJudgment;
+        const judgment = typeof rawJudgment === "string" && rawJudgment.trim() ? rawJudgment.trim() : null;
+        if (judgment !== previousJudgment) corrections.push(UserCorrectionSchema.parse({
+          id: crypto.randomUUID(), thesisId: oldThesis.thesisId, type: "USER_JUDGMENT",
+          action: judgment === null ? "CLEAR" : "SET", before: previousJudgment, after: judgment,
+          reason: judgment === null ? "用户清除本轮独立判断" : "用户保存本轮独立判断",
+          baseStateVersion: project.currentState.version, createdAt: new Date().toISOString(),
+        }));
         const assessment = ThesisAssessmentSchema.parse({ ...item.proposed, thesisRevisionId: thesis.id });
         return { thesis, lifecycle: item.include === false ? "ARCHIVED" as const : "ACTIVE" as const, assessment, userJudgment: judgment == null ? null : String(judgment) };
       });
@@ -571,9 +807,10 @@ export function createV1Router(options: { store?: V1Store; uploadService?: Local
       project.currentState = nextState;
       project.theses = stateItems.map((item) => ({ thesisId: item.thesis.thesisId, title: item.thesis.text.slice(0, 80), statement: item.thesis.text, type: item.thesis.type, criterion: item.thesis.criterion, sourceEvidenceIds: item.thesis.sourceEvidenceIds, userJudgment: item.userJudgment }));
       const filingDoc = run.filingDocumentId ? await receiptOr404(run.filingDocumentId) : null;
-      if (filingDoc && !project.documents.some((document) => document.id === filingDoc.document.id)) project.documents.push({ id: filingDoc.document.id, role: filingDoc.document.role, fileName: filingDoc.document.fileName, sha256: filingDoc.document.sha256, period: filingDoc.document.period, publishedAt: filingDoc.document.publishedAt });
+      if (filingDoc && !project.documents.some((document) => document.id === filingDoc.document.id)) project.documents.push({ id: filingDoc.document.id, role: filingDoc.document.role, fileName: filingDoc.document.fileName, sha256: filingDoc.document.sha256, period: draft.sourceManifest.latestCoveredPeriod, publishedAt: draft.sourceManifest.asOf });
       project.corrections = [...(project.corrections || []), ...corrections];
       project.history.push({ version: nextVersionLabel, confirmedAt: now, state: nextState, diffSummary: `${oldVersion} → ${nextVersionLabel} 财报核验确认；保存 ${corrections.length} 条用户修正`, corrections });
+      await memoryStore.saveProject(project as any);
       await store.saveProject(project);
       await store.saveRun({ ...run, status: "COMPLETED", projectId: project.id, draft: { ...draft, corrections }, updated_at: now });
       return res.json({ projectId: project.id, version: nextVersionLabel, status: "COMPLETED", project, state: nextState });
@@ -582,9 +819,10 @@ export function createV1Router(options: { store?: V1Store; uploadService?: Local
 
   router.post("/projects/:id/filing-runs", async (req, res, next) => {
     try {
-      const project = await store.getProject(req.params.id);
+      const project = await memoryStore.getProject(req.params.id) as V1ProjectRecord | null;
       if (!project) throw statusError("项目不存在", 404);
       if (!project.currentState) throw statusError("项目尚未形成初始研究状态", 409);
+      const ling = requireLing();
       const request = V1FilingRunRequestSchema.safeParse(req.body);
       if (!request.success) throw statusError("财报核验请求缺少有效的文档、期间、披露日期或口径", 400);
       if (request.data.scope === "SEGMENT") throw statusError("当前 MVP 只支持合并或母公司口径", 400);
@@ -598,16 +836,16 @@ export function createV1Router(options: { store?: V1Store; uploadService?: Local
       const filingSpans = await spansOr404(filingDocumentId);
       const theses = project.currentState.items.filter((item) => item.lifecycle === "ACTIVE").map((item) => item.thesis);
       const metrics = requiredMetrics(theses);
-      const facts = factExtractor.extractFactsFromSpans(filingSpans, { companyId: project.id, documentId: filingDocumentId, period, publishedAt, metrics, scope });
+      const facts: Fact[] = [];
       const assessments = new Map<string, ThesisAssessment>();
       for (const thesis of theses) assessments.set(thesis.thesisId, await researchAgent.assessThesis(thesis, { spans: filingSpans, facts, calculations: [] }, { runId: crypto.randomUUID(), companyId: project.id, asOf: publishedAt, allowedDocumentIds: [filingDocumentId] }));
-      let transport: ReturnType<typeof createConfiguredResearchModelTransport> = null;
-      try {
-        transport = createConfiguredResearchModelTransport();
-        await addSemanticReviews(assessments, theses, filingSpans, transport);
-      } catch (err) {
-        console.warn("[v1Router] Semantic review skipped due to transport error:", err);
-      }
+      await addSemanticReviews(assessments, theses, filingSpans, facts, ling, await memoryStore.promptContext(project.id), {
+        projectId: project.id,
+        documentId: filingDocumentId,
+        period,
+        publishedAt,
+        scope,
+      });
       const draftItems = diffGenerator.generateDraftItems(theses, assessments, project.currentState.version > 0 ? project.currentState : null);
       const questions = mergeQuestions(project.currentState.questions || [], assessments);
       const sourceDocuments = [...project.currentState.sourceManifest.documents, { documentId: filingDocumentId, sha256: receipt.document.sha256, purpose: `财报 (${period.end})` }].filter((document, index, all) => all.findIndex((candidate) => candidate.documentId === document.documentId) === index);
@@ -621,12 +859,12 @@ export function createV1Router(options: { store?: V1Store; uploadService?: Local
     } catch (error) { next(error); }
   });
 
-  router.get("/projects", async (_req, res, next) => { try { res.json(await store.getProjects()); } catch (error) { next(error); } });
-  router.get("/projects/:id", async (req, res, next) => { try { const project = await store.getProject(req.params.id); if (!project) throw statusError("项目不存在", 404); res.json(project); } catch (error) { next(error); } });
-  router.get("/projects/:id/state", async (req, res, next) => { try { const project = await store.getProject(req.params.id); if (!project) throw statusError("项目不存在", 404); res.json(project.currentState); } catch (error) { next(error); } });
-  router.get("/projects/:id/history", async (req, res, next) => { try { const project = await store.getProject(req.params.id); if (!project) throw statusError("项目不存在", 404); res.json(project.history); } catch (error) { next(error); } });
-  router.get("/projects/:id/states", async (req, res, next) => { try { const project = await store.getProject(req.params.id); if (!project) throw statusError("项目不存在", 404); res.json(project.history.map((entry) => ({ version: entry.version, confirmedAt: entry.confirmedAt, diffSummary: entry.diffSummary }))); } catch (error) { next(error); } });
-  router.get("/projects/:id/states/:version", async (req, res, next) => { try { const project = await store.getProject(req.params.id); if (!project) throw statusError("项目不存在", 404); const entry = project.history.find((item) => item.version === req.params.version || item.version === `T${req.params.version}`); if (!entry) throw statusError("研究版本不存在", 404); res.json(entry.state); } catch (error) { next(error); } });
+  router.get("/projects", async (_req, res, next) => { try { res.json(await memoryStore.listProjects()); } catch (error) { next(error); } });
+  router.get("/projects/:id", async (req, res, next) => { try { const project = await memoryStore.getProject(req.params.id); if (!project) throw statusError("项目不存在", 404); res.json(project); } catch (error) { next(error); } });
+  router.get("/projects/:id/state", async (req, res, next) => { try { const project = await memoryStore.getProject(req.params.id); if (!project) throw statusError("项目不存在", 404); res.json(project.currentState); } catch (error) { next(error); } });
+  router.get("/projects/:id/history", async (req, res, next) => { try { const project = await memoryStore.getProject(req.params.id); if (!project) throw statusError("项目不存在", 404); res.json(project.history); } catch (error) { next(error); } });
+  router.get("/projects/:id/states", async (req, res, next) => { try { const project = await memoryStore.getProject(req.params.id); if (!project) throw statusError("项目不存在", 404); res.json(project.history.map((entry) => ({ version: entry.version, confirmedAt: entry.confirmedAt, diffSummary: entry.diffSummary }))); } catch (error) { next(error); } });
+  router.get("/projects/:id/states/:version", async (req, res, next) => { try { const project = await memoryStore.getProject(req.params.id); if (!project) throw statusError("项目不存在", 404); const entry = project.history.find((item) => item.version === req.params.version || item.version === `T${req.params.version}`); if (!entry) throw statusError("研究版本不存在", 404); res.json(entry.state); } catch (error) { next(error); } });
 
   return router;
 }

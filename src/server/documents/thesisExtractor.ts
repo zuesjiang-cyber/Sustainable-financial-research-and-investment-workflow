@@ -7,7 +7,7 @@ import type {
   UUID,
   Company,
 } from "../../shared/domain";
-import { ResearchModelTransport } from "../researchModel";
+import { configuredMaxOutputTokens, ResearchModelTransport } from "../researchModel";
 import { ConditionSchema } from "../../shared/domain";
 
 export interface CompanyIdentificationResult {
@@ -233,7 +233,7 @@ ${selectedSpans.map((s, i) => `[SPAN_${i} P${s.regions[0]?.pageNumber || 1}] ${s
           messages: [{ role: "user", content: prompt }],
           tools: [SUBMIT_EXTRACTED_THESES_TOOL],
           tool_choice: { type: "function", function: { name: "submit_extracted_theses" } },
-          max_tokens: 6000,
+          max_tokens: configuredMaxOutputTokens(),
         });
 
         let rawPayload: unknown;
@@ -262,7 +262,7 @@ ${selectedSpans.map((s, i) => `[SPAN_${i} P${s.regions[0]?.pageNumber || 1}] ${s
         if (modelCompany && typeof modelCompany.name === "string" && modelCompany.name.trim()) {
           const name = modelCompany.name.trim();
           const code = (modelCompany.securityCode || "").trim();
-          const exchange = (modelCompany.exchange || "SSE").trim() as Company["exchange"];
+          const exchange = (modelCompany.exchange || "SSE").trim();
           const targetExchange: "SSE" | "SZSE" = exchange === "SZSE" ? "SZSE" : "SSE";
           const existing = candidates.find((c) => c.name === name || (code && c.securityCode === code));
           if (existing) {
@@ -301,14 +301,7 @@ ${selectedSpans.map((s, i) => `[SPAN_${i} P${s.regions[0]?.pageNumber || 1}] ${s
       }
     }
 
-    // With no model configured, keep an explicit offline extractor available
-    // for local development and fixtures.  This is derived solely from the
-    // uploaded spans and is never a fixed demo fallback.
-    const deterministicTheses = this.extractDeterministic(spans);
-    return {
-      theses: deterministicTheses,
-      identification,
-    };
+    throw new Error("指定 Ling 模型未配置，不能使用规则或固定示例提炼观点");
   }
 
   private selectHighValueSpans(spans: EvidenceSpan[]): EvidenceSpan[] {
@@ -489,49 +482,65 @@ ${selectedSpans.map((s, i) => `[SPAN_${i} P${s.regions[0]?.pageNumber || 1}] ${s
 
     const ItemSchema = z.object({
       text: z.string().trim().min(1),
-      originalText: z.string().trim().min(1).default(""),
-      type: z.enum(["NUMERIC_FORECAST", "DIRECTIONAL", "CAUSAL", "QUALITATIVE", "HISTORICAL"]).default("QUALITATIVE"),
-      criterion: z.unknown().optional(),
-      spanIndices: z.array(z.number().int().nonnegative()).default([0]),
+      // Ling usually returns originalText, but allowing the selected source
+      // span as a lossless fallback makes the one-call extractor tolerant of
+      // a concise model response without weakening evidence binding.
+      originalText: z.string().trim().min(1).optional(),
+      // Provider output occasionally uses a semantically reasonable alias
+      // such as RISK or FORECAST.  Parse it first, then map it onto our five
+      // product categories so one label cannot invalidate the full report.
+      type: z.unknown().optional(),
+      criterion: z.unknown(),
+      spanIndices: z.array(z.number().int().nonnegative()).default([]),
+      evidenceIndices: z.array(z.number().int().nonnegative()).default([]),
       priority: z.number().int().optional(),
       sourceEvidenceIds: z.array(z.string().uuid()).optional(),
+    }).refine((item) => item.spanIndices.length > 0 || item.evidenceIndices.length > 0 || (item.sourceEvidenceIds?.length || 0) > 0, {
+      message: "观点必须引用至少一条研报证据",
     });
-    const items = z.array(ItemSchema).min(1).max(10).parse(rawItems);
+    const items = z.array(ItemSchema).min(1).max(6).parse(rawItems);
     return items.map((item) => {
-      let criterion: Condition;
-      try {
-        const criterionInput = this.normaliseCriterion(item.criterion);
-        criterion = ConditionSchema.parse(criterionInput);
-      } catch {
-        criterion = {
-          kind: "SEMANTIC",
-          proposition: item.text,
-          origin: "REPORT_EXPLICIT",
-          requiredEvidence: ["定期报告中的相关业务进展及管理层说明"],
-          horizonEnd: null,
-        };
-      }
-      const indexedEvidence = item.spanIndices.map((index) => spans[index]?.id).filter((id): id is UUID => Boolean(id));
+      const criterionInput = this.normaliseCriterion(item.criterion, item.text);
+      const criterion = ConditionSchema.parse(criterionInput);
+      const indexedEvidence = [...item.spanIndices, ...item.evidenceIndices].map((index) => spans[index]?.id).filter((id): id is UUID => Boolean(id));
       const directEvidence = (item.sourceEvidenceIds || []).filter((id) => spans.some((span) => span.id === id));
       const sourceEvidenceIds = [...new Set([...indexedEvidence, ...directEvidence])];
-      const validEvidence = sourceEvidenceIds.length > 0 ? sourceEvidenceIds : [spans[0]?.id].filter((id): id is UUID => Boolean(id));
-      if (validEvidence.length === 0) throw new Error("Ling 观点缺少有效的原文证据引用");
+      if (sourceEvidenceIds.length === 0) throw new Error("Ling 观点缺少有效的原文证据引用");
+      const originalText = item.originalText || indexedEvidence.map((id) => spans.find((span) => span.id === id)?.quote).find(Boolean) || item.text;
       return {
         id: crypto.randomUUID(),
         groupId: crypto.randomUUID(),
         text: item.text,
-        originalText: item.originalText || item.text,
-        type: item.type,
+        originalText,
+        type: this.normaliseThesisType(item.type),
         criterion,
-        sourceEvidenceIds: validEvidence,
+        sourceEvidenceIds,
         priority: item.priority ?? 5,
       };
     });
   }
 
-  private normaliseCriterion(value: unknown): unknown {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  private normaliseThesisType(value: unknown): "NUMERIC_FORECAST" | "DIRECTIONAL" | "CAUSAL" | "QUALITATIVE" | "HISTORICAL" {
+    const key = typeof value === "string" ? value.trim().toUpperCase().replace(/[\s-]+/g, "_") : "";
+    if (["NUMERIC_FORECAST", "NUMERIC", "FORECAST", "FINANCIAL_FORECAST", "QUANTITATIVE"].includes(key)) return "NUMERIC_FORECAST";
+    if (["DIRECTIONAL", "DIRECTION", "TREND", "GROWTH", "OUTLOOK"].includes(key)) return "DIRECTIONAL";
+    if (["CAUSAL", "CAUSE", "DRIVER", "CATALYST"].includes(key)) return "CAUSAL";
+    if (["HISTORICAL", "HISTORY", "HISTORIC", "FACT"].includes(key)) return "HISTORICAL";
+    return "QUALITATIVE";
+  }
+
+  private normaliseCriterion(value: unknown, thesisText: string): unknown {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return {
+        kind: "SEMANTIC",
+        proposition: thesisText,
+        requiredEvidence: ["后续财报中的相关经营或财务披露"],
+        horizonEnd: null,
+        origin: "REPORT_EXPLICIT",
+      };
+    }
     const criterion = { ...(value as Record<string, unknown>) };
+    if (typeof criterion.kind === "string") criterion.kind = criterion.kind.trim().toUpperCase();
     if (criterion.op === undefined && criterion.operator !== undefined) criterion.op = criterion.operator;
     if (criterion.origin === undefined) criterion.origin = "REPORT_EXPLICIT";
     if (criterion.kind === "TREND" && criterion.tolerance === undefined) criterion.tolerance = null;
@@ -539,6 +548,17 @@ ${selectedSpans.map((s, i) => `[SPAN_${i} P${s.regions[0]?.pageNumber || 1}] ${s
       if (criterion.requiredEvidence === undefined) criterion.requiredEvidence = [];
       if (criterion.horizonEnd === undefined) criterion.horizonEnd = null;
     }
-    return criterion;
+    const parsed = ConditionSchema.safeParse(criterion);
+    if (parsed.success) return parsed.data;
+    // Criterion structure is an internal UI aid, not a reason to discard an
+    // otherwise sourced investment view.  A semantic criterion preserves the
+    // exact thesis and lets Ling verify it against later filings.
+    return {
+      kind: "SEMANTIC",
+      proposition: thesisText,
+      requiredEvidence: ["后续财报中的相关经营或财务披露"],
+      horizonEnd: null,
+      origin: "REPORT_EXPLICIT",
+    };
   }
 }

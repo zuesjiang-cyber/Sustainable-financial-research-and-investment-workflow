@@ -7,10 +7,7 @@ coverage/
 .env*
 !.env.example
 data-local/
+research-memory/
 uploads-local/
 uploads/
 .qa-data/
-.venv/
-*.zip
-scratch/
-data/fintrust.sqlite

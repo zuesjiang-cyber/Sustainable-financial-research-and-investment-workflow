@@ -11,6 +11,7 @@ import { demoProjectInput, demoMaterial, runDemoReplay } from "./demoReplay";
 import { SAMPLE_T2_MATERIAL, loadCaseInput, getInitialSbgProject } from "./seedData";
 import { LocalUploadService, MAX_UPLOAD_BYTES, validateUploadFile, type UploadServiceOptions } from "./documents/uploadService";
 import { createV1Router } from "./v1/v1Router";
+import type { ResearchModelTransport } from "./researchModel";
 import type { ContinuousAnalysisResult, FollowUpQuestion, ProjectState, ResearchThesis, ThesisDelta, ThesisStatus } from "../types/fintrust";
 
 const THESIS_STATUSES: ThesisStatus[] = ["加强", "保持", "削弱", "待评估", "支持", "部分支持", "不足以判断"];
@@ -81,14 +82,10 @@ function createProject(input: any): ProjectState {
 }
 
 /** Testable API factory: no listener or paid model call during import. */
-export async function createApp(options: { analyze?: typeof runContinuousAnalysis; upload?: UploadServiceOptions } = {}) {
+export async function createApp(options: { analyze?: typeof runContinuousAnalysis; upload?: UploadServiceOptions; modelTransport?: ResearchModelTransport | null } = {}) {
   await initProjects();
   const app = express();
   app.use(express.json({ limit: "4mb" }));
-  app.use((req, _res, next) => {
-    console.log(`[REQ] ${req.method} ${req.url}`);
-    next();
-  });
   const drafts = new Map<string, { draft: ContinuousAnalysisResult; created: number }>();
   const analyze = options.analyze || runContinuousAnalysis;
   const uploadService = new LocalUploadService(options.upload);
@@ -116,8 +113,8 @@ export async function createApp(options: { analyze?: typeof runContinuousAnalysi
     (req, res, next) => { Promise.resolve().then(() => fn(req, res)).catch(next); };
   const projectFor = async (id: string) => (await getProjectById(id)) || invalid("研究项目不存在", 404);
   app.get("/api/health", (_req, res) => res.json({ status: "ok", server_time: new Date().toISOString(),
-    llm_configured: Boolean(process.env.FINTRUST_LLM_API_KEY || process.env.GEMINI_API_KEY),
-    gemini_configured: Boolean(process.env.GEMINI_API_KEY) }));
+    llm_configured: Boolean(process.env.FINTRUST_LLM_API_KEY),
+    gemini_configured: false }));
   app.get("/api/projects", route(async (_req, res) => res.json(await getAllProjects())));
   app.get("/api/projects/:id", route(async (req, res) => res.json(await projectFor(req.params.id))));
   app.post("/api/projects", route(async (req, res) => {
@@ -144,7 +141,7 @@ export async function createApp(options: { analyze?: typeof runContinuousAnalysi
     });
     res.status(201).json(receipt);
   }));
-  app.use("/v1", createV1Router({ uploadService }));
+  app.use("/v1", createV1Router({ uploadService, modelTransport: options.modelTransport }));
   app.get("/api/sample-materials/demo/:version", route((req, res) => res.json(demoMaterial(req.params.version))));
   app.get("/api/projects/:id/context", route(async (req, res) => res.json(buildResearchContext(await projectFor(req.params.id), typeof req.query.targetVersion === "string" ? req.query.targetVersion : undefined))));
   app.post("/api/projects/:id/analyze-material", route(async (req, res) => {

@@ -1,6 +1,6 @@
-import fs from "node:fs/promises";
-import fsSync from "node:fs";
 import path from "node:path";
+import { getDataDir, getDb, withTransaction } from "../db";
+import type { Database } from "sql.js";
 import type { ResearchState, UUID } from "../../shared/domain";
 
 export interface V1ProjectRecord {
@@ -56,78 +56,94 @@ export interface V1RunRecord {
   updated_at: string;
 }
 
+type V1Record = V1ProjectRecord | V1RunRecord;
+
+/**
+ * SQLite-backed V1 state store.
+ *
+ * The records remain validated aggregate JSON because the V1 domain state is
+ * versioned as a single snapshot. The rows live in the existing sql.js
+ * database and all writes use db.ts's process-wide transaction queue; this
+ * keeps V1 from opening a competing connection or creating JSON side files.
+ */
 export class V1Store {
-  private readonly dataDir: string;
-  private readonly projectsFile: string;
-  private readonly runsFile: string;
-  private projectWriteTail: Promise<void> = Promise.resolve();
-  private runWriteTail: Promise<void> = Promise.resolve();
+  private readonly dataDir: string | null;
 
   constructor(dataDir?: string) {
-    this.dataDir = path.resolve(dataDir || process.env.FINTRUST_DATA_DIR || "./data-local");
-    if (!fsSync.existsSync(this.dataDir)) {
-      fsSync.mkdirSync(this.dataDir, { recursive: true });
-    }
-    this.projectsFile = path.join(this.dataDir, "v1_projects.json");
-    this.runsFile = path.join(this.dataDir, "v1_runs.json");
+    // Keep the optional constructor argument for callers that need an
+    // isolated test database. Normal application instances follow the current
+    // FINTRUST_DATA_DIR value, which db.ts resolves at call time.
+    this.dataDir = dataDir ? path.resolve(dataDir) : null;
   }
 
-  private async readJson<T>(filePath: string, fallback: T): Promise<T> {
+  private currentDataDir(): string {
+    return this.dataDir || getDataDir();
+  }
+
+  private async readRecords<T extends V1Record>(table: "v1_projects" | "v1_runs"): Promise<T[]> {
+    const db = await getDb(this.currentDataDir());
+    const result = db.exec(`SELECT record_json FROM ${table} ORDER BY created_at ASC, id ASC`);
+    if (!result.length) return [];
+    const recordIndex = result[0].columns.indexOf("record_json");
+    if (recordIndex < 0) return [];
+    return result[0].values.flatMap((row) => {
+      try {
+        const record = JSON.parse(String(row[recordIndex])) as T;
+        return record && typeof record === "object" ? [record] : [];
+      } catch {
+        // A corrupt aggregate should not make unrelated projects disappear;
+        // normal writes always emit JSON and the API validates on use.
+        return [];
+      }
+    });
+  }
+
+  private async readRecord<T extends V1Record>(table: "v1_projects" | "v1_runs", id: string): Promise<T | null> {
+    const db = await getDb(this.currentDataDir());
+    const result = db.exec(`SELECT record_json FROM ${table} WHERE id = ? LIMIT 1`, [id]);
+    if (!result.length || result[0].values.length === 0) return null;
     try {
-      const data = await fs.readFile(filePath, "utf-8");
-      return JSON.parse(data) as T;
+      const record = JSON.parse(String(result[0].values[0][0])) as T;
+      return record && typeof record === "object" ? record : null;
     } catch {
-      return fallback;
+      return null;
     }
   }
 
-  private async writeJson<T>(filePath: string, data: T): Promise<void> {
-    const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-    await fs.writeFile(tempPath, JSON.stringify(data, null, 2), "utf-8");
-    await fs.rename(tempPath, filePath);
+  private async saveRecord(table: "v1_projects" | "v1_runs", record: V1Record): Promise<void> {
+    const now = new Date().toISOString();
+    const persisted = { ...record, updated_at: now };
+    await withTransaction((db: Database) => {
+      db.run(
+        `INSERT INTO ${table} (id, record_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET record_json = excluded.record_json, updated_at = excluded.updated_at`,
+        [record.id, JSON.stringify(persisted), record.created_at || now, now],
+      );
+    }, this.currentDataDir());
   }
 
-  // Projects
   async getProjects(): Promise<V1ProjectRecord[]> {
-    return this.readJson<V1ProjectRecord[]>(this.projectsFile, []);
+    return this.readRecords<V1ProjectRecord>("v1_projects");
   }
 
   async getProject(id: string): Promise<V1ProjectRecord | null> {
-    const list = await this.getProjects();
-    return list.find((p) => p.id === id) || null;
+    return this.readRecord<V1ProjectRecord>("v1_projects", id);
   }
 
   async saveProject(project: V1ProjectRecord): Promise<void> {
-    const operation = this.projectWriteTail.catch(() => undefined).then(async () => {
-      const list = await this.getProjects();
-      const idx = list.findIndex((p) => p.id === project.id);
-      if (idx >= 0) list[idx] = { ...project, updated_at: new Date().toISOString() };
-      else list.push(project);
-      await this.writeJson(this.projectsFile, list);
-    });
-    this.projectWriteTail = operation;
-    await operation;
+    await this.saveRecord("v1_projects", project);
   }
 
-  // Runs
   async getRuns(): Promise<V1RunRecord[]> {
-    return this.readJson<V1RunRecord[]>(this.runsFile, []);
+    return this.readRecords<V1RunRecord>("v1_runs");
   }
 
   async getRun(id: string): Promise<V1RunRecord | null> {
-    const list = await this.getRuns();
-    return list.find((r) => r.id === id) || null;
+    return this.readRecord<V1RunRecord>("v1_runs", id);
   }
 
   async saveRun(run: V1RunRecord): Promise<void> {
-    const operation = this.runWriteTail.catch(() => undefined).then(async () => {
-      const list = await this.getRuns();
-      const idx = list.findIndex((r) => r.id === run.id);
-      if (idx >= 0) list[idx] = { ...run, updated_at: new Date().toISOString() };
-      else list.push(run);
-      await this.writeJson(this.runsFile, list);
-    });
-    this.runWriteTail = operation;
-    await operation;
+    await this.saveRecord("v1_runs", run);
   }
 }

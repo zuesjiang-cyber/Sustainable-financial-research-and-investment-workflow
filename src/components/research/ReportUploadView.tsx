@@ -1,6 +1,23 @@
 import React, { useState } from "react";
-import { Upload, FileText, Sparkles, ArrowRight, ShieldCheck, CheckCircle2, Loader2, AlertTriangle, Clock } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  FileCheck2,
+  FileText,
+  HelpCircle,
+  Loader2,
+  LockKeyhole,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  TrendingUp,
+  Upload,
+  XCircle,
+} from "lucide-react";
 import type { UploadReceipt } from "../../shared/domain";
+import { DEMO_RESEARCH, DEMO_STATUS_META, type DemoResearchStatus } from "../../data/demoResearch";
 
 export interface ReportUploadParams {
   file?: File;
@@ -12,237 +29,200 @@ export interface ReportUploadParams {
 interface ReportUploadViewProps {
   onStartAnalysis: (params: ReportUploadParams) => void;
   onStartExtraction?: (reportDocumentId: string) => void;
+  onOpenDemo?: () => void;
   isAnalyzing: boolean;
   currentStep?: string;
   receipt?: UploadReceipt | null;
   error?: string | null;
 }
 
+function StatusIcon({ status }: { status: DemoResearchStatus }) {
+  if (status === "SUPPORTED") return <CheckCircle2 className="h-3.5 w-3.5" />;
+  if (status === "PARTIALLY_SUPPORTED") return <TrendingUp className="h-3.5 w-3.5" />;
+  if (status === "WEAKENED") return <XCircle className="h-3.5 w-3.5" />;
+  return <HelpCircle className="h-3.5 w-3.5" />;
+}
+
+function PreviewStatus({ status }: { status: DemoResearchStatus }) {
+  const meta = DEMO_STATUS_META[status];
+  return (
+    <span className={`demo-status demo-status-compact ${meta.className}`}>
+      <StatusIcon status={status} />
+      {meta.label}
+    </span>
+  );
+}
+
+const previewItems = [
+  DEMO_RESEARCH.items[0],
+  DEMO_RESEARCH.items[1],
+  DEMO_RESEARCH.items[2],
+  DEMO_RESEARCH.items[4],
+];
+
+const demoCounts = {
+  supported: DEMO_RESEARCH.items.filter((item) => item.status === "SUPPORTED").length,
+  partial: DEMO_RESEARCH.items.filter((item) => item.status === "PARTIALLY_SUPPORTED").length,
+  weakened: DEMO_RESEARCH.items.filter((item) => item.status === "WEAKENED").length,
+  unresolved: DEMO_RESEARCH.items.filter((item) => item.status === "UNRESOLVED").length,
+};
+
 export const ReportUploadView: React.FC<ReportUploadViewProps> = ({
   onStartAnalysis,
   onStartExtraction,
+  onOpenDemo,
   isAnalyzing,
   currentStep = "解析研报中...",
   receipt = null,
   error = null,
 }) => {
-  const [selectedDemo, setSelectedDemo] = useState<string>("300661");
   const [isDragOver, setIsDragOver] = useState(false);
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
+  const startUpload = (file: File) => onStartAnalysis({ fileName: file.name, file });
+
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
     setIsDragOver(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      onStartAnalysis({ fileName: file.name, file });
-    }
+    const file = event.dataTransfer.files?.[0];
+    if (file) startUpload(file);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      onStartAnalysis({ fileName: file.name, file });
-    }
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) startUpload(file);
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-12 px-6 space-y-10 animate-in fade-in duration-300">
-      {/* Title & Introduction */}
-      <div className="text-center space-y-3">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/25 text-blue-400 text-xs font-semibold tracking-wide uppercase">
-          <Sparkles className="w-3.5 h-3.5" />
-          FinTrust 研报观点核验与持续研究 V1
+    <div className="report-upload-page">
+      <section className="report-hero">
+        <div>
+          <div className="ft-eyebrow"><Sparkles className="h-3.5 w-3.5" /> 研报观点持续核验 V1</div>
+          <h1>让每一条研报观点，<span>都能被下一期财报回答</span></h1>
+          <p>
+            上传研报，由 Ling-3.0-Flash-Fin 提炼可验证观点；确认 T0 后，再用你自己的官方财报逐条核验，结果沉淀到本地 Markdown Research Memory。
+          </p>
         </div>
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-          上传研报，先完成真实 PDF 解析
-        </h1>
-        <p className="text-base text-slate-400 max-w-2xl mx-auto leading-relaxed">
-          先在本地解析您上传的研报 PDF，保存原文件、解析结构和可追溯片段；观点提炼与后续财报核验将在您确认下一步后进行。
-        </p>
-      </div>
-
-      {/* Upload Box / Progress State */}
-      {error && !isAnalyzing && (
-        <div className="bg-rose-950/40 border border-rose-800/80 rounded-2xl p-4 flex items-start gap-3 text-sm text-rose-200">
-          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-semibold">研报上传或解析失败</p>
-            <p className="mt-1 text-rose-200/80">{error}</p>
-            <p className="mt-2 text-xs text-rose-300/80">请检查文件后重试；本次失败不会生成成功回执。</p>
-          </div>
+        <div className="report-flow-strip" aria-label="真实研究流程">
+          <div className="report-flow-item is-active"><span>01</span><strong>上传研报</strong></div>
+          <ArrowRight className="h-4 w-4" />
+          <div className="report-flow-item"><span>02</span><strong>确认 T0</strong></div>
+          <ArrowRight className="h-4 w-4" />
+          <div className="report-flow-item"><span>03</span><strong>核验 T1 / T2</strong></div>
         </div>
-      )}
+      </section>
 
-      {receipt && !isAnalyzing ? (
-        <div className="bg-slate-900/90 border border-emerald-500/30 rounded-2xl p-8 shadow-2xl space-y-6">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-6 h-6 text-emerald-400" />
-            </div>
+      <div className="report-first-grid">
+        <section className="demo-preview-card" aria-labelledby="demo-preview-title">
+          <div className="demo-preview-head">
             <div>
-              <h3 className="text-lg font-bold text-white">PDF 已上传并完成解析</h3>
-              <p className="text-sm text-slate-400 mt-1">文件已保存到本地存储，解析回执可用于后续观点提炼。</p>
+              <div className="demo-preview-kicker"><span className="demo-kicker-dot" /> Demo · 已完成核验</div>
+              <h2 id="demo-preview-title">先看结果，再决定是否上传</h2>
+              <p>{DEMO_RESEARCH.company} · {DEMO_RESEARCH.ticker} · {DEMO_RESEARCH.period}</p>
             </div>
+            <span className="demo-readonly-mark"><LockKeyhole className="h-3 w-3" /> 只读样例</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
-              <span className="text-xs text-slate-500 block">文件名</span>
-              <span className="text-slate-200 break-all">{receipt.document.fileName}</span>
-            </div>
-            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
-              <span className="text-xs text-slate-500 block">SHA-256</span>
-              <span className="text-slate-200 font-mono">{receipt.document.sha256.slice(0, 12)}...</span>
-            </div>
-            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
-              <span className="text-xs text-slate-500 block">页数</span>
-              <span className="text-slate-200">{receipt.parseSummary.pageCount}</span>
-            </div>
-            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
-              <span className="text-xs text-slate-500 block">提取片段数</span>
-              <span className="text-slate-200">{receipt.parseSummary.spanCount}</span>
-            </div>
+
+          <div className="demo-preview-insight">
+            <span>本轮研究结论</span>
+            <strong>{DEMO_RESEARCH.roundSummary.headline}</strong>
+            <p>{DEMO_RESEARCH.roundSummary.detail}</p>
           </div>
-          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-200">
-            下一步（观点提炼）尚未运行。当前阶段只完成文件上传与 PDF 结构化解析。
+
+          <div className="demo-preview-summary">
+            <div className="demo-preview-total"><strong>{DEMO_RESEARCH.items.length}</strong><span>条观点</span></div>
+            <div className="demo-preview-count is-supported"><CheckCircle2 /><strong>{demoCounts.supported}</strong><span>已验证</span></div>
+            <div className="demo-preview-count is-partial"><TrendingUp /><strong>{demoCounts.partial}</strong><span>部分支持</span></div>
+            <div className="demo-preview-count is-weakened"><XCircle /><strong>{demoCounts.weakened}</strong><span>被削弱</span></div>
+            <div className="demo-preview-count is-unresolved"><HelpCircle /><strong>{demoCounts.unresolved}</strong><span>待跟踪</span></div>
           </div>
-          {onStartExtraction && (
-            <button
-              onClick={() => onStartExtraction(receipt.document.id)}
-              className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-blue-600/25 transition-all text-base"
-            >
-              <Sparkles className="w-5 h-5 text-blue-200" />
-              开始提炼观点
+
+          <div className="demo-preview-list">
+            {previewItems.map((item) => (
+              <article key={item.id} className={`demo-preview-item ${DEMO_STATUS_META[item.status].className}`}>
+                <div className="demo-preview-item-head">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <StatusIcon status={item.status} />
+                    <h3>{item.title}</h3>
+                  </div>
+                  <PreviewStatus status={item.status} />
+                </div>
+                <p className="demo-preview-verdict">{item.verdict}</p>
+                <div className="demo-preview-fact"><span>旧观点</span><p>{item.originalView}</p></div>
+                <div className="demo-preview-fact"><span>最新财报</span><p>{item.latestFact}</p></div>
+                <div className="demo-preview-gap"><Target className="h-3.5 w-3.5" />{item.gap}</div>
+              </article>
+            ))}
+          </div>
+
+          <div className="demo-preview-foot">
+            <span><ShieldCheck className="h-4 w-4" /> 演示数据 · 每条结果保留差距、原因与下一问</span>
+            <button type="button" onClick={onOpenDemo || (() => onStartAnalysis({ fileName: "FinTrust_Demo_State.md", isDemo: true }))} disabled={isAnalyzing} className="ft-btn ft-btn-primary">
+              查看完整核验 Demo <ArrowRight className="h-4 w-4" />
             </button>
+          </div>
+        </section>
+
+        <section className="upload-card" aria-labelledby="upload-title">
+          <div className="upload-card-head">
+            <div className="upload-card-icon"><Upload className="h-5 w-5" /></div>
+            <div>
+              <p className="upload-card-kicker">真实研究入口</p>
+              <h2 id="upload-title">上传我的研报</h2>
+            </div>
+          </div>
+          <p className="upload-card-intro">先解析原文与坐标，再让 Ling 提炼可被财报核验的观点。文件不会被演示数据替代。</p>
+
+          {error && !isAnalyzing && (
+            <div className="inline-alert is-error" role="alert">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <div><strong>研报上传或解析失败</strong><p>{error}</p></div>
+            </div>
           )}
-        </div>
-      ) : isAnalyzing ? (
-        <div className="bg-slate-900/90 border border-blue-500/30 rounded-2xl p-10 text-center space-y-6 shadow-2xl">
-          <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
-            <div className="absolute inset-0 rounded-full border-4 border-blue-500/20 border-t-blue-500 animate-spin" />
-            <FileText className="w-7 h-7 text-blue-400" />
-          </div>
-          <div className="space-y-2">
-            <h3 className="text-lg font-bold text-white tracking-tight">正在上传并解析研报 PDF</h3>
-            <p className="text-sm font-mono text-blue-300 animate-pulse">{currentStep}</p>
-          </div>
-          <div className="max-w-md mx-auto space-y-2 text-left text-xs font-mono text-slate-400 bg-slate-950 p-4 rounded-xl border border-slate-800">
-            <div className="flex items-center gap-2 text-blue-400">
-              <Loader2 className="w-4 h-4 animate-spin" /> 上传文件并校验 PDF 内容
-            </div>
-            <div className="flex items-center gap-2 text-slate-300 font-semibold">
-              <Clock className="w-4 h-4" /> 解析页面、段落和表格
-            </div>
-            <p className="text-[11px] text-slate-500 pl-6">当前不会识别公司、提炼观点或查找财报。</p>
-          </div>
-        </div>
-      ) : (
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setIsDragOver(true);
-          }}
-          onDragLeave={() => setIsDragOver(false)}
-          onDrop={handleDrop}
-          className={`relative border-2 border-dashed rounded-3xl p-10 sm:p-14 text-center transition-all duration-200 cursor-pointer ${
-            isDragOver
-              ? "border-blue-500 bg-blue-500/5 scale-[1.01]"
-              : "border-slate-800 hover:border-slate-700 bg-slate-900/60 hover:bg-slate-900/80"
-          }`}
-        >
-          <input
-            type="file"
-            accept=".pdf"
-            onChange={handleFileChange}
-            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-          />
-          <div className="space-y-4 max-w-sm mx-auto">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shadow-inner">
-              <Upload className="w-8 h-8" />
-            </div>
-            <div className="space-y-1">
-              <p className="text-base font-bold text-white">点击上传或将研报 PDF 拖拽至此处</p>
-              <p className="text-xs text-slate-400">支持各类券商深度研报 (单文件最大 50MB)</p>
-            </div>
-            <div className="inline-flex items-center gap-1.5 text-xs text-slate-500 font-medium pt-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              本地/沙箱私有解析 · 原文坐标严格绑定
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Quick Launch Demo Reports */}
-      <div className="border-t border-slate-800/80 pt-8 space-y-4">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-            快速体验：固定样例（Demo）
-          </span>
-          <span className="text-xs text-slate-500">固定数据演示，不代表用户上传结果</span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <button
-            onClick={() => {
-              setSelectedDemo("300661");
-              onStartAnalysis({
-                fileName: "圣邦股份_300661_模拟芯片龙头深度跟踪.pdf",
-                companyCode: "300661",
-                isDemo: true,
-              });
-            }}
-            disabled={isAnalyzing}
-            className="p-5 rounded-2xl border border-slate-800 bg-slate-900/60 hover:border-blue-500/50 hover:bg-slate-900 transition-all text-left group cursor-pointer flex flex-col justify-between space-y-3"
-          >
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-mono font-bold text-blue-400 px-2 py-0.5 bg-blue-500/10 rounded border border-blue-500/20">
-                  深市 300661
-                </span>
-                <span className="text-[11px] text-slate-500">双轮持续演进样例</span>
+          {receipt && !isAnalyzing ? (
+            <div className="upload-receipt">
+              <div className="upload-receipt-title"><CheckCircle2 className="h-5 w-5" /><strong>PDF 已解析</strong></div>
+              <p className="upload-receipt-file"><FileText className="h-4 w-4" />{receipt.document.fileName}</p>
+              <div className="upload-receipt-grid">
+                <span>页数 <strong>{receipt.parseSummary.pageCount}</strong></span>
+                <span>片段 <strong>{receipt.parseSummary.spanCount}</strong></span>
+                <span>SHA <strong>{receipt.document.sha256.slice(0, 10)}…</strong></span>
               </div>
-              <h4 className="font-bold text-white text-sm group-hover:text-blue-300 transition-colors">
-                圣邦股份：综合毛利率回升与模拟芯片复苏预测
-              </h4>
-              <p className="text-xs text-slate-400 line-clamp-2">
-                固定数据演示观点卡片与两轮研究界面，不读取当前上传文件。
-              </p>
+              <div className="inline-alert is-info"><FileCheck2 className="h-4 w-4 shrink-0" />文件已保存，下一步由 Ling 提炼观点。</div>
+              {onStartExtraction && <button type="button" onClick={() => onStartExtraction(receipt.document.id)} className="ft-btn ft-btn-primary w-full"><Sparkles className="h-4 w-4" />开始提炼观点<ArrowRight className="h-4 w-4" /></button>}
             </div>
-            <div className="flex items-center gap-1.5 text-xs font-medium text-blue-400 group-hover:translate-x-0.5 transition-transform">
-              启动样例演示 <ArrowRight className="w-3.5 h-3.5" />
+          ) : isAnalyzing ? (
+            <div className="upload-progress">
+              <div className="upload-progress-icon"><Loader2 className="h-6 w-6 animate-spin" /></div>
+              <strong>正在处理你的研报</strong>
+              <span>{currentStep}</span>
+              <div className="upload-progress-steps"><span className="is-done"><CheckCircle2 /> 上传 PDF 并校验</span><span><Clock3 /> 解析页面、段落与表格</span></div>
             </div>
-          </button>
+          ) : (
+            <div
+              onDragOver={(event) => { event.preventDefault(); setIsDragOver(true); }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={handleDrop}
+              className={`upload-dropzone ${isDragOver ? "is-dragging" : ""}`}
+            >
+              <input type="file" accept="application/pdf,.pdf" onChange={handleFileChange} />
+              <div className="upload-dropzone-icon"><Upload className="h-6 w-6" /></div>
+              <strong>点击上传或拖入 PDF</strong>
+              <span>券商研报 · 单文件最大 50MB</span>
+              <em><ShieldCheck className="h-3.5 w-3.5" />本地解析 · 原文坐标严格绑定</em>
+            </div>
+          )}
 
-          <button
-            onClick={() => {
-              setSelectedDemo("603160");
-              onStartAnalysis({
-                fileName: "汇顶科技_603160_指纹芯片与车载传感深度研报.pdf",
-                companyCode: "603160",
-                isDemo: true,
-              });
-            }}
-            disabled={isAnalyzing}
-            className="p-5 rounded-2xl border border-slate-800 bg-slate-900/60 hover:border-blue-500/50 hover:bg-slate-900 transition-all text-left group cursor-pointer flex flex-col justify-between space-y-3"
-          >
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-mono font-bold text-emerald-400 px-2 py-0.5 bg-emerald-500/10 rounded border border-emerald-500/20">
-                  沪市 603160
-                </span>
-                <span className="text-[11px] text-slate-500">单轮基准核验</span>
-              </div>
-              <h4 className="font-bold text-white text-sm group-hover:text-emerald-300 transition-colors">
-                汇顶科技：车载传感放量与经营现金流改善核验
-              </h4>
-              <p className="text-xs text-slate-400 line-clamp-2">
-                固定数据演示单轮核验界面，不读取当前上传文件。
-              </p>
-            </div>
-            <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-400 group-hover:translate-x-0.5 transition-transform">
-              启动样例演示 <ArrowRight className="w-3.5 h-3.5" />
-            </div>
-          </button>
-        </div>
+          <div className="upload-card-note"><span className="status-dot is-green" />真实流程会在你确认 T0 后才进入财报核验</div>
+        </section>
       </div>
+
+      <section className="workflow-promise">
+        <div className="workflow-promise-item"><span>01</span><div><strong>上传研报</strong><p>保存原文件、解析结构与证据坐标</p></div></div>
+        <div className="workflow-promise-item"><span>02</span><div><strong>人工确认 T0</strong><p>你决定哪些观点进入持续跟踪</p></div></div>
+        <div className="workflow-promise-item"><span>03</span><div><strong>财报逐条核验</strong><p>事实、差距与原因都可回溯</p></div></div>
+        <div className="workflow-promise-item"><span>04</span><div><strong>Markdown Memory</strong><p>用户修正跨轮继承，不被模型覆盖</p></div></div>
+      </section>
     </div>
   );
 };

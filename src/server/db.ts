@@ -138,8 +138,8 @@ async function initializeDb(targetDir: string): Promise<Database> {
   }
 }
 
-export async function getDb(): Promise<Database> {
-  const targetDir = getDataDir();
+export async function getDb(requestedDir?: string): Promise<Database> {
+  const targetDir = path.resolve(requestedDir || getDataDir());
   if (dbInstance && dbDataDir === targetDir) return dbInstance;
 
   // Runtime changes of FINTRUST_DATA_DIR are primarily useful in tests. Close
@@ -212,8 +212,8 @@ function restoreDatabase(snapshot: Uint8Array): void {
   }
 }
 
-async function executeTransaction<T>(callback: (db: Database) => Promise<T> | T): Promise<T> {
-  const db = await getDb();
+async function executeTransaction<T>(callback: (db: Database) => Promise<T> | T, targetDir = getDataDir()): Promise<T> {
+  const db = await getDb(targetDir);
   const snapshot = new Uint8Array(db.export());
   let committed = false;
 
@@ -254,8 +254,8 @@ async function executeTransaction<T>(callback: (db: Database) => Promise<T> | T)
   }
 }
 
-export function withTransaction<T>(callback: (db: Database) => Promise<T> | T): Promise<T> {
-  const operation = writeQueue.then(() => executeTransaction(callback));
+export function withTransaction<T>(callback: (db: Database) => Promise<T> | T, targetDir = getDataDir()): Promise<T> {
+  const operation = writeQueue.then(() => executeTransaction(callback, path.resolve(targetDir)));
   // A rejected operation must not permanently poison the queue.
   writeQueue = operation.then(
     () => undefined,
@@ -393,6 +393,23 @@ function initSchema(db: Database): void {
       updated_at TEXT NOT NULL,
       evidence_ids_json TEXT,
       PRIMARY KEY (project_id, id)
+    );
+
+    -- V1 keeps its validated aggregate state as JSON, while the SQLite row
+    -- provides one durable store and the same transaction/queue semantics as
+    -- the legacy tables. This avoids a second JSON-file persistence layer.
+    CREATE TABLE IF NOT EXISTS v1_projects (
+      id TEXT PRIMARY KEY,
+      record_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS v1_runs (
+      id TEXT PRIMARY KEY,
+      record_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
   `);
 

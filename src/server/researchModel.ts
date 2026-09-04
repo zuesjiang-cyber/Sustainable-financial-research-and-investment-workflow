@@ -24,6 +24,8 @@ export interface ResearchModelRequest {
   tool_choice?: ResearchModelToolChoice;
   model?: string;
   max_tokens?: number;
+  /** OpenRouter-compatible reasoning budget. Structured extraction should use none. */
+  reasoning_effort?: "none" | "minimal" | "low" | "medium" | "high";
 }
 
 /**
@@ -90,6 +92,14 @@ const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 
 export const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 45_000;
 export const MAX_MODEL_REQUEST_TIMEOUT_MS = 120_000;
+export const DEFAULT_MODEL_MAX_OUTPUT_TOKENS = 24_000;
+
+export function configuredMaxOutputTokens(
+  env: Record<string, string | undefined> = process.env
+): number {
+  const value = Number(env.FINTRUST_MAX_OUTPUT_TOKENS || DEFAULT_MODEL_MAX_OUTPUT_TOKENS);
+  return Number.isInteger(value) && value > 0 ? value : DEFAULT_MODEL_MAX_OUTPUT_TOKENS;
+}
 
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
@@ -178,20 +188,9 @@ export function getModelConfiguration(
     };
   }
 
-  const geminiKey = envValue(env, "GEMINI_API_KEY");
-  if (geminiKey) {
-    return {
-      configured: true,
-      provider: "gemini",
-      model: envValue(env, "GEMINI_MODEL") || DEFAULT_GEMINI_MODEL,
-    };
-  }
-
   return {
     configured: false,
-    reason: explicitBase || explicitModel
-      ? "FINTRUST_LLM_BASE_URL/MODEL is present but FINTRUST_LLM_API_KEY is not configured"
-      : "No FINTRUST_LLM_API_KEY or GEMINI_API_KEY is configured",
+    reason: "仅支持指定 Ling 模型 inclusionai/ling-3.0-flash-fin:free；请配置 FINTRUST_LLM_API_KEY",
   };
 }
 
@@ -237,21 +236,89 @@ function usageFromRaw(raw: any): ResearchModelUsage | undefined {
   return Object.keys(result).length ? result : undefined;
 }
 
+/**
+ * Some Ling OpenRouter providers place the entire structured answer in the
+ * model's reasoning field and leave content empty.  We never expose or store
+ * that reasoning.  Only a self-contained, valid JSON object is recovered;
+ * everything else remains an error.
+ */
+function extractJsonFromText(text: string): string | undefined {
+  if (!text || typeof text !== "string") return undefined;
+  // 1. Check all markdown code blocks
+  const codeBlocks = text.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi);
+  for (const match of codeBlocks) {
+    const block = match[1].trim();
+    try {
+      const p = JSON.parse(block);
+      if (p && typeof p === "object") return JSON.stringify(p);
+    } catch {}
+  }
+  // 2. Scan for balanced braces {...}
+  let depth = 0;
+  let start = -1;
+  let lastValid: string | undefined;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (text[i] === "}") {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        const candidate = text.slice(start, i + 1);
+        try {
+          const parsed = JSON.parse(candidate);
+          if (parsed && typeof parsed === "object") lastValid = JSON.stringify(parsed);
+        } catch {}
+        start = -1;
+      }
+    }
+  }
+  if (lastValid) return lastValid;
+  // 3. Fallback: find widest { ... }
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    try {
+      const parsed = JSON.parse(text.slice(firstBrace, lastBrace + 1));
+      if (parsed && typeof parsed === "object") return JSON.stringify(parsed);
+    } catch {}
+  }
+  return undefined;
+}
+
+function structuredJsonFromReasoning(message: Record<string, unknown>): string | undefined {
+  const candidates: string[] = [];
+  if (typeof message.reasoning_content === "string") candidates.push(message.reasoning_content);
+  if (typeof message.reasoning === "string") candidates.push(message.reasoning);
+  if (Array.isArray(message.reasoning_details)) {
+    for (const detail of message.reasoning_details) {
+      if (detail && typeof detail === "object") {
+        const record = detail as Record<string, unknown>;
+        if (typeof record.text === "string") candidates.push(record.text);
+        if (typeof record.content === "string") candidates.push(record.content);
+      }
+    }
+  }
+  for (const candidate of candidates) {
+    const extracted = extractJsonFromText(candidate);
+    if (extracted) return extracted;
+  }
+  // Return the raw candidate text as fallback if tokens were generated
+  return candidates.find((c) => c && c.trim()) || undefined;
+}
+
 function normaliseOpenAIResponse(raw: any, fallbackModel: string): ResearchModelResponse {
   const choice = raw?.choices?.[0];
   if (!choice || !choice.message) throw new Error("Model response did not contain an assistant message");
   const message = choice.message as Record<string, unknown>;
-  const contentCandidate = (typeof message.content === "string" && message.content.trim())
-    ? message.content
-    : (typeof message.reasoning === "string" && message.reasoning.trim())
-      ? message.reasoning
-      : (typeof message.reasoning_content === "string" && message.reasoning_content.trim())
-        ? message.reasoning_content
-        : message.content;
+  const content = message.content;
   const toolCalls = parseToolCalls(message.tool_calls);
-  const normalisedContent = typeof contentCandidate === "string" ? contentCandidate : contentCandidate == null ? undefined : JSON.stringify(contentCandidate);
+  const directContent = typeof content === "string" ? content : content == null ? undefined : JSON.stringify(content);
+  const normalisedContent = directContent && directContent.trim() ? directContent : structuredJsonFromReasoning(message);
   if (toolCalls.length === 0 && !(normalisedContent && normalisedContent.trim())) {
-    throw new Error("OpenAI-compatible response did not contain text or a tool call");
+    const finishReason = String(choice.finish_reason || choice.native_finish_reason || "unknown");
+    const outputTokens = raw?.usage?.completion_tokens;
+    throw new Error(`OpenAI-compatible response was empty (finish_reason=${finishReason}${typeof outputTokens === "number" ? `, output_tokens=${outputTokens}` : ""})`);
   }
   return {
     message: {
@@ -343,6 +410,15 @@ export class OpenAICompatibleTransport implements ResearchModelTransport {
     if (request.max_tokens !== undefined) {
       requestBody.max_tokens = request.max_tokens;
       requestBody.max_completion_tokens = request.max_tokens;
+    }
+    if (request.reasoning_effort !== undefined) {
+      requestBody.reasoning = { effort: request.reasoning_effort, exclude: true };
+      // Ling 3 controls hybrid thinking in its chat template. OpenRouter's
+      // generic reasoning flag alone may still leave all generated tokens in
+      // reasoning_content, so set the model-native switch as well.
+      if (request.reasoning_effort === "none") {
+        requestBody.chat_template_kwargs = { enable_thinking: false };
+      }
     }
 
     const response = await this.fetchImpl(endpoint, {
@@ -460,8 +536,7 @@ export function createConfiguredResearchModelTransport(
     if (!key) return null;
     return new OpenAICompatibleTransport(config.model, config.base_url || DEFAULT_OPENAI_BASE_URL, key, options.fetch);
   }
-  const key = envValue(env, "GEMINI_API_KEY");
-  return key ? new GeminiTransport(config.model, key) : null;
+  return null;
 }
 
 export function getTransportProvider(transport: ResearchModelTransportLike): ResearchModelTransport["provider"] {

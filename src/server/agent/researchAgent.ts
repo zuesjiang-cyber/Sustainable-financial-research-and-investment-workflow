@@ -27,11 +27,73 @@ export interface AgentEvidencePack {
   calculations: Calculation[];
 }
 
+type CompareOp = "GT" | "GTE" | "EQ" | "LTE" | "LT";
+
 export class ResearchAgent {
   private readonly metricRegistry: MetricRegistry;
 
   constructor(metricRegistry: MetricRegistry = new MetricRegistry()) {
     this.metricRegistry = metricRegistry;
+  }
+
+  private compare(actual: Decimal, target: Decimal, op: CompareOp): boolean {
+    switch (op) {
+      case "GT": return actual.greaterThan(target);
+      case "GTE": return actual.greaterThanOrEqualTo(target);
+      case "LTE": return actual.lessThanOrEqualTo(target);
+      case "LT": return actual.lessThan(target);
+      case "EQ": return actual.equals(target);
+    }
+  }
+
+  private maturityFor(period: { basis: string; end: string }, fact: Fact): "NOT_DUE" | "IN_PROGRESS" | "DUE" {
+    if (period.basis === "YEAR" && fact.period.basis !== "YEAR") return "IN_PROGRESS";
+    return fact.period.end < period.end ? "IN_PROGRESS" : "DUE";
+  }
+
+  /**
+   * Keep the explanation contract honest even when the optional semantic
+   * model call is unavailable: every statement below is either a direct quote
+   * or explicitly says that a cause was not disclosed.  No causal conclusion
+   * is inferred from a number alone.
+   */
+  private evidenceBackedExplanation(
+    evidencePack: AgentEvidencePack,
+    factIds: UUID[],
+    evidenceIds: UUID[],
+    calculationIds: UUID[],
+    allowedDocumentIds: UUID[],
+  ): { disclosedCauses: Array<CitedStatement & { attribution: "MANAGEMENT_EXPLANATION" | "DISCLOSED_FACT" }>; hypotheses: Array<{ text: string; supportingEvidenceIds: UUID[]; missingEvidence: string[] }> } {
+    const currentEvidence = [...new Set(evidenceIds)].filter((id) => evidencePack.spans.some((span) => span.id === id && allowedDocumentIds.includes(span.documentId)));
+    const causePattern = /(原因|主要由于|主要受|受.*影响|推动|拖累|改善.*得益|下降.*由于|增长.*得益|供需|价格|销量|产品结构|产能利用率)/;
+    const causeSpan = evidencePack.spans.find((span) => currentEvidence.includes(span.id) && causePattern.test(span.quote));
+    const disclosedCauses = causeSpan
+      ? [{
+          text: causeSpan.quote.slice(0, 1_000),
+          evidenceIds: [causeSpan.id],
+          factIds,
+          calculationIds,
+          attribution: "MANAGEMENT_EXPLANATION" as const,
+        }]
+      : factIds.length > 0
+        ? [{
+            text: currentEvidence.length > 0
+              ? "当前财报片段披露了用于核验的数值事实，但未明确披露该结果的经营原因。"
+              : "当前已绑定的财务事实未包含可引用的原因披露，经营原因仍然未知。",
+            evidenceIds: currentEvidence,
+            factIds,
+            calculationIds,
+            attribution: "DISCLOSED_FACT" as const,
+          }]
+        : [];
+    const hypotheses = factIds.length > 0
+      ? [{
+          text: "结果的具体经营原因尚需管理层讨论与分析或财报附注佐证，不能仅凭指标数值确认。",
+          supportingEvidenceIds: [] as UUID[],
+          missingEvidence: ["管理层讨论与分析或财报附注中的变化原因"],
+        }]
+      : [];
+    return { disclosedCauses, hypotheses };
   }
 
   /**
@@ -72,6 +134,54 @@ export class ResearchAgent {
         (f) => f.metric === metric && f.companyId === context.companyId &&
           context.allowedDocumentIds.includes(f.documentId) && f.scope === criterion.scope
       );
+
+      // Revenue growth is computed from two revenue facts.  The fact extractor
+      // stores the current and comparative periods separately; the model is
+      // never asked to calculate or invent the percentage.
+      if (metric === "revenue_growth") {
+        const revenueFacts = evidencePack.facts
+          .filter((f) => f.metric === "revenue" && f.companyId === context.companyId && context.allowedDocumentIds.includes(f.documentId) && f.scope === criterion.scope)
+          .sort((a, b) => b.period.end.localeCompare(a.period.end));
+        const current = revenueFacts[0];
+        const previous = current && revenueFacts.find((candidate) => candidate.period.end !== current.period.end);
+        if (current) {
+          factIds.push(current.id);
+          evidenceIds.push(...current.evidenceIds);
+        }
+        if (previous) {
+          factIds.push(previous.id);
+          evidenceIds.push(...previous.evidenceIds);
+        }
+        if (current && previous) {
+          const calculation = this.metricRegistry.computeYoYGrowth(current, previous);
+          const calculationId = crypto.randomUUID();
+          calculationIds.push(calculationId);
+          maturity = this.maturityFor(targetPeriod, current);
+          if (calculation.result !== null) {
+            const actualGrowth = new Decimal(calculation.result);
+            const normalizedTarget = criterion.unit === "RATIO" && targetDec.greaterThan(1) ? targetDec.dividedBy(100) : targetDec;
+            const isMeeting = this.compare(actualGrowth, normalizedTarget, criterion.op);
+            interimSignal = isMeeting ? "ABOVE" : "BELOW";
+            if (maturity === "IN_PROGRESS") {
+              status = isMeeting ? "PARTIALLY_SUPPORTED" : "UNRESOLVED";
+              summary = `营业收入同比重算值为 ${(actualGrowth.times(100)).toFixed(2)}%，年度目标尚未到期，阶段性信号为 ${interimSignal}。`;
+            } else {
+              status = isMeeting ? "SUPPORTED" : "WEAKENED";
+              summary = `经法定报表 Decimal 重算，营业收入同比为 ${(actualGrowth.times(100)).toFixed(2)}%，${isMeeting ? "达到" : "未达到"}研报预期门槛。`;
+            }
+            observedGap = {
+              text: `营业收入同比 ${(actualGrowth.times(100)).toFixed(2)}% vs 目标 ${(normalizedTarget.times(100)).toFixed(2)}%（差额 ${(actualGrowth.minus(normalizedTarget).times(100)).toFixed(2)} pct）`,
+              evidenceIds: [...new Set([...current.evidenceIds, ...previous.evidenceIds])],
+              factIds: [current.id, previous.id],
+              calculationIds: [calculationId],
+            };
+          }
+        } else if (current) {
+          summary = `营业收入截至 ${current.period.end} 已披露，但缺少可比期间事实，暂不能计算同比。`;
+          observedGap = { text: "营业收入当前期间已披露，但可比期间值缺失", evidenceIds: current.evidenceIds, factIds: [current.id], calculationIds: [] };
+          maturity = this.maturityFor(targetPeriod, current);
+        }
+      }
 
       // If metric is gross_margin, we can compute it from revenue and cost_of_revenue
       let computedMarginVal: Decimal | null = null;
@@ -116,7 +226,7 @@ export class ResearchAgent {
                 ? targetDec.dividedBy(100)
                 : targetDec;
 
-              const isMeeting = computedMarginVal.greaterThanOrEqualTo(normalizedTargetRatio);
+              const isMeeting = this.compare(computedMarginVal, normalizedTargetRatio, criterion.op);
 
               if (maturity === "IN_PROGRESS") {
                 // Year not due yet! Cannot fail or prematurely conclude supported
@@ -146,15 +256,8 @@ export class ResearchAgent {
         evidenceIds.push(...fact.evidenceIds);
         const actualDec = new Decimal(fact.value);
 
-        const isMet = criterion.op === "GTE"
-          ? actualDec.greaterThanOrEqualTo(targetDec)
-          : criterion.op === "GT"
-            ? actualDec.greaterThan(targetDec)
-            : criterion.op === "LTE"
-              ? actualDec.lessThanOrEqualTo(targetDec)
-              : criterion.op === "LT"
-                ? actualDec.lessThan(targetDec)
-                : actualDec.equals(targetDec);
+        const normalizedTarget = criterion.unit === "RATIO" && targetDec.greaterThan(1) ? targetDec.dividedBy(100) : targetDec;
+        const isMet = this.compare(actualDec, normalizedTarget, criterion.op);
 
         if (criterion.period.basis === "YEAR" && fact.period.basis !== "YEAR") {
           maturity = "IN_PROGRESS";
@@ -174,7 +277,7 @@ export class ResearchAgent {
         const gapCalculationId = crypto.randomUUID();
         calculationIds.push(gapCalculationId);
         observedGap = {
-          text: `实际值 ${fact.value} vs 目标值 ${targetStr}（差额 ${actualDec.minus(targetDec).toString()}）`,
+          text: `实际值 ${fact.value} vs 目标值 ${targetStr}（差额 ${actualDec.minus(normalizedTarget).toString()}）`,
           evidenceIds: fact.evidenceIds,
           factIds: [fact.id],
           calculationIds: [gapCalculationId],
@@ -226,6 +329,7 @@ export class ResearchAgent {
         const fact = matchingFacts[0];
         factIds.push(fact.id);
         evidenceIds.push(...fact.evidenceIds);
+        maturity = this.maturityFor(criterion.period, fact);
         summary = `${fact.labelOriginal} 本期披露值为 ${fact.value}，但缺少可比期间事实，暂不能判断趋势。`;
         observedGap = {
           text: `本期实际披露为 ${fact.value}，可比期间值缺失`,
@@ -256,24 +360,7 @@ export class ResearchAgent {
       answer: null,
     });
 
-    const disclosedCauses: Array<CitedStatement & { attribution: "MANAGEMENT_EXPLANATION" | "DISCLOSED_FACT" }> = [];
-    const hypotheses: any[] = [];
-
-    if (observedGap) {
-      disclosedCauses.push({
-        text: `定期报告披露相关财务事实（${observedGap.text}）。`,
-        evidenceIds: observedGap.evidenceIds,
-        factIds: observedGap.factIds || [],
-        calculationIds: observedGap.calculationIds || [],
-        attribution: "DISCLOSED_FACT",
-      });
-      hypotheses.push({
-        text: `需持续跟踪后续季度供应链及行业供需格局变化对该指标的扰动。`,
-        supportingEvidenceIds: observedGap.evidenceIds,
-        missingEvidence: ["完整年度经审计财务报表及附注"],
-      });
-    }
-
+    const explanation = this.evidenceBackedExplanation(evidencePack, factIds, evidenceIds, calculationIds, context.allowedDocumentIds);
     const assessment: ThesisAssessment = {
       id: crypto.randomUUID(),
       thesisId: thesis.thesisId,
@@ -287,8 +374,8 @@ export class ResearchAgent {
       calculationIds,
       evidenceIds,
       observedGap,
-      disclosedCauses,
-      hypotheses,
+      disclosedCauses: explanation.disclosedCauses,
+      hypotheses: explanation.hypotheses,
       conditions: [
         {
           path: "criterion",

@@ -53,6 +53,20 @@ test("FactExtractor standardizes revenue and cost into CAS consolidated facts", 
   const cost = facts.find((f) => f.metric === "cost_of_revenue");
   assert.equal(Boolean(cost), true);
   assert.equal(cost?.value, "96600000"); // 9660 万元 -> 96,600,000 元
+
+  // A narrative percentage must not be mistaken for the revenue amount.
+  const narrativeFacts = extractor.extractFactsFromSpans([{
+    ...spans[0],
+    id: crypto.randomUUID(),
+    quote: "营业收入同比增长12.4%，达到13.2亿元。",
+  }], {
+    companyId: compId,
+    documentId: docId,
+    period: { start: "2025-01-01", end: "2025-12-31", basis: "YEAR" },
+    publishedAt: "2026-04-20T10:00:00Z",
+    metrics: ["revenue"],
+  });
+  assert.equal(narrativeFacts[0]?.originalValue, "13.2");
 });
 
 test("MetricRegistry calculates gross margin and yoy growth accurately", () => {
