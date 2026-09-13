@@ -6,16 +6,31 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { tmpdir } from "node:os";
 import { createApp } from "../src/server/app";
+import { createMockLingTransport } from "./fixtures/mockLingTransport";
 import type { Server } from "node:http";
 
+/**
+ * End-to-end walkthrough over real HTTP: upload -> T0 -> T1 -> T2.
+ *
+ * The PDF upload, Python parse, persistence, versioning and Markdown Memory are
+ * all real. Only the model is mocked, because this repo has no
+ * FINTRUST_LLM_API_KEY and the product fails closed without the designated Ling
+ * route. Mocking the transport is what makes this workflow testable offline; it
+ * does NOT constitute a real-model acceptance (see
+ * tests/fixtures/mockLingTransport.ts and 12_验收与评测.md).
+ */
 test("FinTrust V1 Walkthrough HTTP API: upload -> T0 -> T1 -> T2 with stable thesis IDs", async () => {
   const dataDir = mkdtempSync(path.join(tmpdir(), "fintrust-v1-walkthrough-db-"));
   const storageRoot = mkdtempSync(path.join(tmpdir(), "fintrust-v1-walkthrough-storage-"));
+  const memoryDir = mkdtempSync(path.join(tmpdir(), "fintrust-v1-walkthrough-memory-"));
   process.env.FINTRUST_DATA_DIR = dataDir;
   process.env.FINTRUST_UPLOAD_STORAGE_DIR = storageRoot;
+  // Isolate Markdown Memory too: without this the test writes fake projects
+  // into the real ./research-memory directory.
+  process.env.FINTRUST_MEMORY_DIR = memoryDir;
   delete process.env.FINTRUST_LLM_API_KEY;
   delete process.env.GEMINI_API_KEY;
-  const app = await createApp();
+  const app = await createApp({ modelTransport: createMockLingTransport() });
   let server: Server;
   const port = await new Promise<number>((resolve) => {
     server = app.listen(0, "127.0.0.1", () => {
@@ -219,5 +234,6 @@ test("FinTrust V1 Walkthrough HTTP API: upload -> T0 -> T1 -> T2 with stable the
     await new Promise<void>((resolve, reject) => server!.close((err) => err ? reject(err) : resolve()));
     rmSync(dataDir, { recursive: true, force: true });
     rmSync(storageRoot, { recursive: true, force: true });
+    rmSync(memoryDir, { recursive: true, force: true });
   }
 });

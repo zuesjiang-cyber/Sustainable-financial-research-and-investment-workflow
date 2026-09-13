@@ -39,6 +39,12 @@ export interface V1ProjectRecord {
     corrections?: any[];
   }>;
   corrections?: any[];
+  /**
+   * Marks a project built from synthetic/demo material rather than a real
+   * user upload. Such projects are excluded from the default project list so
+   * demo content can never masquerade as a researcher's saved work.
+   */
+  isSynthetic?: boolean;
 }
 
 export interface V1RunRecord {

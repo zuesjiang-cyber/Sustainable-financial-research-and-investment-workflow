@@ -63,7 +63,9 @@ function DetailRow({
   );
 }
 
-function DemoThesisCard({ item, index }: { item: DemoResearchItem; index: number }) {
+// Typed as React.FC so the intrinsic `key` prop stays assignable at the call
+// site; an inline props annotation rejects `key` under React 19 + TS 5.8.
+const DemoThesisCard: React.FC<{ item: DemoResearchItem; index: number }> = ({ item, index }) => {
   return (
     <article className={`demo-thesis-card ${DEMO_STATUS_META[item.status].className}`}>
       <div className="demo-thesis-card-head">
@@ -111,7 +113,7 @@ function DemoThesisCard({ item, index }: { item: DemoResearchItem; index: number
       </div>
     </article>
   );
-}
+};
 
 export const DemoResearchView: React.FC<DemoResearchViewProps> = ({ onBackHome }) => {
   const supported = DEMO_RESEARCH.items.filter((item) => item.status === "SUPPORTED").length;

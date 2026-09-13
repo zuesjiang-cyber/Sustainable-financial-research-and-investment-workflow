@@ -11,3 +11,6 @@ research-memory/
 uploads-local/
 uploads/
 .qa-data/
+
+# Local Python env used by the PDF parser (auto-detected, not a dependency)
+.venv/

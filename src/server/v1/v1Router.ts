@@ -726,6 +726,11 @@ export function createV1Router(options: { store?: V1Store; uploadService?: Local
     try {
       const run = await getRunOrDemo(req.params.id);
       if (!run) throw statusError("Run 不存在", 404);
+      // The demo run is a read-only product showcase. Confirming it used to
+      // write a real project whose theses cited a non-existent synthetic PDF,
+      // which then appeared under "继续已有真实研究项目" and permanently
+      // polluted Markdown Memory. Demo content must never enter the real path.
+      if (run.id === DEMO_RUN_ID) throw statusError("演示 Run 为只读展示，不能确认为真实研究项目；请上传真实研报 PDF", 409);
       if (run.status !== "AWAITING_THESIS_REVIEW" && run.status !== "AWAITING_ASSESSMENT_REVIEW") throw statusError("该 Run 当前不能确认", 409);
       if (run.kind === "INITIAL_REPORT") {
         const companyInput = req.body?.company;
@@ -859,7 +864,15 @@ export function createV1Router(options: { store?: V1Store; uploadService?: Local
     } catch (error) { next(error); }
   });
 
-  router.get("/projects", async (_req, res, next) => { try { res.json(await memoryStore.listProjects()); } catch (error) { next(error); } });
+  // Synthetic/demo projects are hidden unless the caller explicitly asks for
+  // them, so the home page only ever offers real research to resume.
+  router.get("/projects", async (req, res, next) => {
+    try {
+      const projects = await memoryStore.listProjects() as Array<V1ProjectRecord & { isSynthetic?: boolean }>;
+      const includeSynthetic = req.query.includeSynthetic === "true";
+      res.json(includeSynthetic ? projects : projects.filter((project) => project.isSynthetic !== true));
+    } catch (error) { next(error); }
+  });
   router.get("/projects/:id", async (req, res, next) => { try { const project = await memoryStore.getProject(req.params.id); if (!project) throw statusError("项目不存在", 404); res.json(project); } catch (error) { next(error); } });
   router.get("/projects/:id/state", async (req, res, next) => { try { const project = await memoryStore.getProject(req.params.id); if (!project) throw statusError("项目不存在", 404); res.json(project.currentState); } catch (error) { next(error); } });
   router.get("/projects/:id/history", async (req, res, next) => { try { const project = await memoryStore.getProject(req.params.id); if (!project) throw statusError("项目不存在", 404); res.json(project.history); } catch (error) { next(error); } });

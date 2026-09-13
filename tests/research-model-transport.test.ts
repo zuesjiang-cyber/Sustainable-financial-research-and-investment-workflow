@@ -205,7 +205,9 @@ test("empty and HTTP-error responses fail without leaking provider body or key",
   assert.ok(emptyTransport);
   await assert.rejects(
     emptyTransport.complete({ messages: [{ role: "user", content: "empty" }], tools: [] }),
-    /did not contain text or a tool call/
+    // The transport is OpenAI-compatible only; an empty assistant message is
+    // reported as such rather than with the legacy Gemini wording.
+    /OpenAI-compatible response was empty/
   );
 
   const errorTransport = createConfiguredResearchModelTransport(OPENROUTER_ENV, {
@@ -243,7 +245,13 @@ test("missing key and wrong model fail closed without touching fetch or Gemini",
   });
   assert.equal(explicitMissing.configured, false);
   assert.match(explicitMissing.reason || "", /FINTRUST_LLM_API_KEY/);
-  assert.equal(getModelConfiguration({ GEMINI_API_KEY: "gemini-offline-key" }).provider, "gemini");
+  // A Gemini key alone must NOT produce a working configuration: the product
+  // is bound to the designated Ling route and deliberately does not fall back
+  // to Gemini. Failing closed here is the intended behaviour.
+  const geminiOnly = getModelConfiguration({ GEMINI_API_KEY: "gemini-offline-key" });
+  assert.equal(geminiOnly.configured, false);
+  assert.equal(geminiOnly.provider, undefined);
+  assert.match(geminiOnly.reason || "", /FINTRUST_LLM_API_KEY/);
 
   const wrongModel = await runModelCheck({
     env: { ...OPENROUTER_ENV, FINTRUST_LLM_MODEL: "some-other-model" },
