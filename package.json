@@ -12,7 +12,7 @@
     "lint": "tsc --noEmit",
     "test": "node --import ./tests/fixtures/registerCssModules.mjs --import tsx --test tests/*.test.ts tests/*.test.tsx src/lib/*.test.ts",
     "model:check": "node --import tsx scripts/check-model.ts",
-    "test:demo": "node --import ./tests/fixtures/registerCssModules.mjs --import tsx --test tests/demo-isolation.test.ts tests/demo-render.test.tsx"
+    "test:demo": "node --import ./tests/fixtures/registerCssModules.mjs --import tsx --test tests/demo-isolation.test.ts tests/demo-render.test.tsx tests/demo-review.test.tsx"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

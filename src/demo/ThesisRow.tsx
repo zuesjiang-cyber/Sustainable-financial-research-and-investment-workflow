@@ -15,7 +15,7 @@ import type {
   ThesisBrief,
   ThesisVersionView,
 } from "./types";
-import { ATTRIBUTION, MATURITY, SIGNAL, STATUS, SUPPORT } from "./meta";
+import { ATTRIBUTION, MATURITY, SIGNAL, STATUS, SUPPORT, splitCriterion } from "./meta";
 import { renderWithFigures, type FigureLookup } from "./figures";
 
 /**
@@ -74,12 +74,6 @@ export function normaliseRequest(text: string): string {
     .replace(/[\s，。、；：（）()「」『』【】/·—\-–]/g, "")
     .replace(/[或的与和及了是在]/g, "")
     .slice(0, 10);
-}
-
-function splitCriterion(statement: string): { title: string; criterion: string | null } {
-  const m = statement.match(/^(.*?)（核验门槛：(.+?)）[。.]?$/);
-  if (!m) return { title: statement, criterion: null };
-  return { title: m[1].trim(), criterion: m[2].trim() };
 }
 
 export const ThesisRow: React.FC<Props> = ({

@@ -148,3 +148,88 @@ export const CORRECTION_KIND: Record<string, string> = {
 
 /** Kept for the refusal state, where an icon reads faster than a word. */
 export const RefusedIcon = CircleSlash;
+
+/* ------------------------------------------------------------------ */
+/* 画面二 — 事实与推论的词汇                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Evidence nature, and what it is allowed to do.
+ *
+ * `canSettleNumericFact` is the whole point of the layer: an unaudited forecast
+ * can move the user's attention but can never make a numeric fact hold. The
+ * downgrade is applied before judgement, not after.
+ */
+export const NATURE: Record<
+  string,
+  { label: string; short: string; canSettleNumericFact: boolean; className: string }
+> = {
+  AUDITED: {
+    label: "经审计",
+    short: "审计",
+    canSettleNumericFact: true,
+    className: "is-audited",
+  },
+  UNAUDITED_ACTUAL: {
+    label: "未经审计实际数",
+    short: "实际数",
+    canSettleNumericFact: true,
+    className: "is-actual",
+  },
+  PRELIMINARY: {
+    label: "业绩快报",
+    short: "快报",
+    canSettleNumericFact: false,
+    className: "is-prelim",
+  },
+  FORECAST: {
+    label: "业绩预告",
+    short: "预告",
+    canSettleNumericFact: false,
+    className: "is-forecast",
+  },
+  NARRATIVE: {
+    label: "叙述性披露",
+    short: "叙述",
+    canSettleNumericFact: false,
+    className: "is-narrative",
+  },
+  THIRD_PARTY: {
+    label: "第三方",
+    short: "第三方",
+    canSettleNumericFact: false,
+    className: "is-third",
+  },
+};
+
+export const VERDICT: Record<
+  string,
+  { label: string; className: string }
+> = {
+  HOLDS: { label: "成立", className: "is-holds" },
+  FAILS: { label: "不成立", className: "is-fails" },
+};
+
+export const INFERENCE_STRENGTH: Record<string, { label: string; className: string }> = {
+  MODERATE: { label: "有一定依据", className: "is-moderate" },
+  TENTATIVE: { label: "尚属试探", className: "is-tentative" },
+};
+
+export const FACT_KIND: Record<string, string> = {
+  NUMERIC: "数值",
+  DISCLOSURE: "披露",
+  EVIDENCE_EXISTS: "证据存在性",
+};
+
+/**
+ * A thesis statement carries its own admission criterion in a trailing
+ * parenthetical. Splitting it rather than parsing it inline keeps the criterion
+ * visible as a separate thing on every surface — it is the rule the user agreed
+ * to, and it must not be absorbed into the prose where it can be quietly
+ * rewritten by a later round.
+ */
+export function splitCriterion(statement: string): { title: string; criterion: string | null } {
+  const m = statement.match(/^(.*?)（核验门槛：(.+?)）[。.]?$/);
+  if (!m) return { title: statement, criterion: null };
+  return { title: m[1].trim(), criterion: m[2].trim() };
+}

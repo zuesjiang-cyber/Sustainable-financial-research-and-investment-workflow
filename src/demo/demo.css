@@ -1508,3 +1508,824 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ========================================================================== */
+/* 画面一 — 分析动画                                                           */
+/* The user asked not to watch the machine work, only to be able to trace the  */
+/* output afterwards. So this surface is an agent *shape*: motion without      */
+/* information, plus exactly one true sentence underneath it. No token counts, */
+/* no tool JSON, no percentages pretending to be measured. The bar below is    */
+/* discrete — seven segments over seven real stages — because a continuous     */
+/* progress bar would be a lie.                                                */
+/* ========================================================================== */
+
+.ar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 30px;
+  min-height: 76vh;
+  padding: 52px 24px 44px;
+  text-align: center;
+}
+
+.ar-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--rd-text-3);
+}
+
+.ar-head h2 {
+  margin: 10px 0 8px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--rd-ink);
+}
+
+.ar-src {
+  font-size: 12.5px;
+  color: var(--rd-text-2);
+}
+
+.ar-src b {
+  font-weight: 600;
+  color: var(--rd-ink);
+}
+
+.ar-live {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 1px 6px;
+  border: 1px solid var(--rd-hairline);
+  border-radius: var(--rd-r-sm);
+  font-family: var(--rd-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--rd-text-3);
+  vertical-align: 1px;
+}
+
+/* --- the stage --- */
+
+.ar-stage {
+  position: relative;
+  width: 184px;
+  height: 184px;
+  display: grid;
+  place-items: center;
+}
+
+.ar-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid transparent;
+}
+
+.ar-ring.a {
+  border-top-color: var(--rd-accent);
+  border-right-color: rgba(47, 95, 191, 0.16);
+  animation: ar-spin 2.9s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+.ar-ring.b {
+  inset: 25px;
+  border-bottom-color: var(--rd-weak);
+  border-left-color: rgba(156, 74, 34, 0.14);
+  animation: ar-spin 4.3s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite reverse;
+}
+
+.ar-ring.c {
+  inset: 50px;
+  border-top-color: rgba(14, 21, 38, 0.16);
+  animation: ar-spin 6.5s linear infinite;
+}
+
+@keyframes ar-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ar-core {
+  position: relative;
+  width: 74px;
+  height: 90px;
+  border: 1px solid var(--rd-hairline);
+  border-radius: var(--rd-r-sm);
+  background: var(--rd-surface);
+  overflow: hidden;
+  animation: ar-breathe 2.9s ease-in-out infinite;
+}
+
+@keyframes ar-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(47, 95, 191, 0); }
+  50% { box-shadow: 0 0 0 7px rgba(47, 95, 191, 0.05); }
+}
+
+.ar-core-icon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--rd-accent);
+  opacity: 0.5;
+}
+
+.ar-core-icon svg { width: 26px; height: 26px; }
+
+.ar-sweep {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 24px;
+  background: linear-gradient(
+    180deg,
+    rgba(47, 95, 191, 0) 0%,
+    rgba(47, 95, 191, 0.14) 50%,
+    rgba(47, 95, 191, 0) 100%
+  );
+  animation: ar-sweep 2.3s ease-in-out infinite;
+}
+
+@keyframes ar-sweep {
+  0% { top: -24px; }
+  100% { top: 90px; }
+}
+
+/* ruled lines on the lower half: a page being read, not a page being written */
+.ar-core::after {
+  content: "";
+  position: absolute;
+  inset: 14px 13px;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(14, 21, 38, 0.13) 0 1px,
+    transparent 1px 7px
+  );
+  -webkit-mask-image: linear-gradient(to bottom, transparent 44%, #000 44%);
+  mask-image: linear-gradient(to bottom, transparent 44%, #000 44%);
+}
+
+/* --- the one real line --- */
+
+.ar-line {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 52px;
+}
+
+.ar-line-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--rd-ink);
+}
+
+.ar-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rd-accent);
+  animation: ar-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes ar-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+.ar-line-sub {
+  max-width: 48ch;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--rd-text-3);
+}
+
+/* --- discrete progress --- */
+
+.ar-bar {
+  display: flex;
+  gap: 5px;
+  width: min(420px, 100%);
+}
+
+.ar-seg {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--rd-hairline);
+  transition: background 0.4s ease;
+}
+
+.ar-seg.on { background: var(--rd-accent); }
+.ar-seg.now { background: var(--rd-weak); }
+
+.ar-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.ar-skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 12px;
+  color: var(--rd-text-3);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color var(--rd-ease);
+}
+
+.ar-skip svg { width: 13px; height: 13px; }
+.ar-skip:hover:not(:disabled) { color: var(--rd-ink); }
+.ar-skip:disabled { opacity: 0.4; cursor: default; }
+
+.ar-note {
+  max-width: 62ch;
+  font-size: 11.5px;
+  line-height: 1.75;
+  color: var(--rd-text-3);
+}
+
+/* ========================================================================== */
+/* 画面二 — 分析结果，待确认                                                    */
+/* Two zones that must never be mistaken for one another. Facts are crisp:     */
+/* solid rule, verdict glyph, binary. Inferences are soft: dashed rule, a      */
+/* 推论 chip on every single line, and three compulsory sub-fields. The visual */
+/* difference is the product rule made visible — 推论不会升级成事实，事实不会    */
+/* 被稀释成推论.                                                                */
+/* ========================================================================== */
+
+.rv-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 26px 0 20px;
+  border-bottom: 1px solid var(--rd-hairline);
+}
+
+.rv-kicker {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--rd-accent);
+}
+
+.rv-head h2 {
+  margin: 0 0 6px;
+  max-width: 30em;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--rd-ink);
+}
+
+.rv-meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--rd-text-3);
+}
+
+.rv-tally {
+  display: flex;
+  gap: 26px;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.rv-tally dt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--rd-text-3);
+}
+
+.rv-tally dd {
+  margin: 2px 0 0;
+  font-family: var(--rd-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--rd-ink);
+}
+
+.rv-tally dd span {
+  display: block;
+  margin-top: 2px;
+  font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", sans-serif;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--rd-text-3);
+}
+
+/* --- thesis cards --- */
+
+.rv-list { padding: 4px 0 8px; }
+
+.rv-card {
+  padding: 22px 0;
+  border-bottom: 1px solid var(--rd-hairline);
+}
+
+.rv-card.is-settled { opacity: 0.72; }
+
+.rv-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.rv-card-head h3 {
+  margin: 0;
+  max-width: 52em;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.55;
+  color: var(--rd-ink);
+}
+
+.rv-card-title { min-width: 0; }
+
+/* Same treatment as .rd-criterion on the desk: the rule is code, not prose. */
+.rv-criterion {
+  margin: 5px 0 0;
+  max-width: 50em;
+  font-family: var(--rd-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.005em;
+  line-height: 1.6;
+  color: var(--rd-text-3);
+}
+
+/* The status pill reuses .rd-status from the desk, so it is deliberately not
+   restyled here — a status must look the same wherever it appears. */
+.rv-card-head .rd-status { flex-shrink: 0; }
+
+/* --- 本次未涉及 --- */
+
+.rv-untouched {
+  display: flex;
+  gap: 11px;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border-radius: var(--rd-r);
+  background: var(--rd-hairline-soft);
+}
+
+.rv-untouched svg {
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  color: var(--rd-text-3);
+}
+
+.rv-untouched strong {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--rd-text-2);
+}
+
+.rv-untouched p {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--rd-text-3);
+}
+
+/* --- the evidence-nature cap firing ---
+   Shown only when it fires. A rule that silently downgrades a verdict would be
+   the system disagreeing with itself in private, so the downgrade is announced
+   and counted. */
+
+.rv-cap {
+  display: flex;
+  gap: 11px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--rd-weak-line);
+  border-radius: var(--rd-r);
+  background: var(--rd-weak-bg);
+}
+
+.rv-cap svg {
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  color: var(--rd-weak);
+}
+
+.rv-cap strong {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--rd-weak);
+}
+
+.rv-cap p {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--rd-text-2);
+}
+
+/* --- section heads --- */
+
+.rv-block { margin-bottom: 20px; }
+
+.rv-block-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 11px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--rd-text-2);
+}
+
+.rv-block-head svg { width: 13px; height: 13px; color: var(--rd-text-3); }
+
+.rv-block-count {
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--rd-hairline);
+  font-family: var(--rd-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
+  letter-spacing: 0;
+  color: var(--rd-text-2);
+}
+
+.rv-block-note {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--rd-text-3);
+}
+
+.rv-none {
+  margin: 0;
+  padding: 11px 0 11px 15px;
+  border-left: 2px dashed var(--rd-hairline);
+  font-size: 12.5px;
+  color: var(--rd-text-3);
+}
+
+/* --- facts: binary, crisp --- */
+
+.rv-facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rv-fact {
+  display: flex;
+  gap: 12px;
+  padding: 13px 0 13px 14px;
+  border-left: 2px solid var(--rd-hairline);
+}
+
+.rv-fact + .rv-fact { border-top: 1px solid var(--rd-hairline-soft); }
+
+.rv-fact.is-holds { border-left-color: var(--rd-ok); }
+.rv-fact.is-fails { border-left-color: var(--rd-weak); }
+
+.rv-fact-mark {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  margin-top: 1px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.rv-fact-mark svg { width: 11px; height: 11px; }
+
+.rv-fact.is-holds .rv-fact-mark { background: var(--rd-ok-bg); color: var(--rd-ok); }
+.rv-fact.is-fails .rv-fact-mark { background: var(--rd-weak-bg); color: var(--rd-weak); }
+
+.rv-fact-main { min-width: 0; flex: 1; }
+
+.rv-fact-statement {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--rd-ink);
+}
+
+.rv-fact-why {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--rd-weak);
+}
+
+.rv-fact.is-holds .rv-fact-why { color: var(--rd-text-2); }
+
+.rv-fact-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 7px 0 0;
+  font-size: 11px;
+  color: var(--rd-text-3);
+}
+
+.rv-nature {
+  padding: 1px 6px;
+  border: 1px solid var(--rd-hairline);
+  border-radius: 3px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--rd-text-2);
+}
+
+.rv-nature.is-audited { border-color: var(--rd-ok-line); background: var(--rd-ok-bg); color: var(--rd-ok); }
+.rv-nature.is-actual { border-color: var(--rd-part-line); background: var(--rd-part-bg); color: var(--rd-part); }
+.rv-nature.is-prelim,
+.rv-nature.is-forecast { border-color: var(--rd-weak-line); background: var(--rd-weak-bg); color: var(--rd-weak); }
+.rv-nature.is-narrative,
+.rv-nature.is-third { background: var(--rd-hairline-soft); }
+
+.rv-fact-kind { letter-spacing: 0.02em; }
+
+.rv-fact-src {
+  font-family: var(--rd-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+}
+
+/* --- inferences: soft, labelled, three parts compulsory --- */
+
+.rv-inferences {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rv-inference {
+  padding: 13px 15px 14px;
+  border: 1px dashed var(--rd-part-line);
+  border-left: 3px dashed var(--rd-part-line);
+  border-radius: var(--rd-r);
+  background: rgba(238, 243, 249, 0.34);
+}
+
+.rv-inference.is-tentative {
+  border-color: var(--rd-hairline);
+  border-left-color: var(--rd-hairline);
+  background: var(--rd-hairline-soft);
+}
+
+.rv-inference-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.rv-inference-tag::before {
+  content: "推论";
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: var(--rd-part);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.rv-inference.is-tentative .rv-inference-tag::before { background: var(--rd-open); }
+
+.rv-inference-tag span {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--rd-text-3);
+}
+
+.rv-inference-text {
+  margin: 0 0 11px;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--rd-ink);
+}
+
+.rv-inference-parts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid rgba(211, 223, 238, 0.7);
+}
+
+.rv-inference.is-tentative .rv-inference-parts { border-top-color: var(--rd-hairline); }
+
+.rv-inference-parts dt {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  color: var(--rd-part);
+}
+
+.rv-inference.is-tentative .rv-inference-parts dt { color: var(--rd-open); }
+
+.rv-inference-parts dd {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--rd-text-2);
+}
+
+.rv-caveat {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  margin: 10px 0 0;
+  padding-top: 9px;
+  border-top: 1px solid rgba(211, 223, 238, 0.7);
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--rd-weak);
+}
+
+.rv-caveat svg { width: 12px; height: 12px; margin-top: 2px; flex-shrink: 0; }
+
+/* --- user actions --- */
+
+.rv-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-top: 4px;
+}
+
+.rv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--rd-hairline);
+  border-radius: var(--rd-r);
+  background: var(--rd-surface);
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--rd-text-2);
+  cursor: pointer;
+  transition: border-color var(--rd-ease), color var(--rd-ease), background var(--rd-ease);
+}
+
+.rv-btn:hover:not(:disabled) { border-color: #ccd3de; color: var(--rd-ink); }
+.rv-btn svg { width: 14px; height: 14px; }
+
+.rv-btn.is-primary {
+  border-color: var(--rd-accent);
+  background: var(--rd-accent);
+  color: #fff;
+}
+
+.rv-btn.is-primary:hover:not(:disabled) {
+  border-color: #27519f;
+  background: #27519f;
+  color: #fff;
+}
+
+.rv-btn:disabled { opacity: 0.42; cursor: not-allowed; }
+
+.rv-judge-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  width: 100%;
+}
+
+.rv-judge-edit textarea {
+  width: 100%;
+  min-height: 78px;
+  padding: 10px 12px;
+  border: 1px solid var(--rd-hairline);
+  border-radius: var(--rd-r);
+  background: var(--rd-surface);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--rd-ink);
+  resize: vertical;
+}
+
+.rv-judge-edit textarea:focus {
+  outline: none;
+  border-color: var(--rd-accent);
+  box-shadow: 0 0 0 3px rgba(47, 95, 191, 0.1);
+}
+
+.rv-judge-edit textarea::placeholder { color: var(--rd-text-3); }
+
+.rv-judge-btns { display: flex; gap: 9px; }
+
+.rv-decided {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--rd-text-2);
+}
+
+.rv-decided svg { width: 13px; height: 13px; color: var(--rd-ok); flex-shrink: 0; }
+
+.rv-undo {
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 12px;
+  color: var(--rd-text-3);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.rv-undo:hover { color: var(--rd-ink); }
+
+/* --- confirm bar --- */
+
+.rv-foot {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 8px;
+  padding: 15px 0 18px;
+  border-top: 1px solid var(--rd-hairline);
+  background: linear-gradient(to top, var(--rd-canvas) 78%, rgba(247, 248, 250, 0));
+}
+
+.rv-foot-note {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--rd-text-3);
+}
+
+.rv-foot-btns { display: flex; gap: 9px; flex-shrink: 0; }
+
+/* --- desk additions --- */
+
+.rd-ghost.is-accent {
+  border-color: rgba(47, 95, 191, 0.34);
+  background: var(--rd-accent-soft);
+  color: var(--rd-accent);
+}
+
+.rd-ghost.is-accent:hover { border-color: var(--rd-accent); color: var(--rd-accent); }
+.rd-ghost.is-accent svg { color: var(--rd-accent); }
+
+.rd-confirmed {
+  margin: 9px 0 0;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--rd-ok);
+}
+
+@media (max-width: 820px) {
+  .rv-head { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .rv-tally { gap: 20px; }
+  .rv-inference-parts { grid-template-columns: 1fr; gap: 10px; }
+  .rv-foot { flex-direction: column; align-items: stretch; gap: 12px; }
+  .rv-foot-btns { justify-content: flex-end; }
+  .rv-card-head { flex-direction: column; align-items: flex-start; gap: 7px; }
+}

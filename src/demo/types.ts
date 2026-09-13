@@ -340,3 +340,96 @@ export interface ThesisBrief {
   /** True when the round produced no new evidence for this thesis. */
   noNewEvidence?: boolean;
 }
+
+/* ------------------------------------------------------------------ */
+/* 画面二 — 事实与推论                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The output of a round, split strictly in two.
+ *
+ * A FACT is binary: it holds or it does not. There is no "partly holds" and no
+ * hedging, because a fact is either verifiable against the disclosure or it is
+ * not. Facts never require the user to take a position.
+ *
+ * An INFERENCE is the model's judgement. It is restrained by construction: it
+ * must carry its basis, its limitation and the gap that would close it, or it is
+ * not emitted at all. An inference never becomes a fact however confident the
+ * model is, and a fact is never diluted into an inference because another
+ * explanation is conceivable.
+ */
+
+export type FactVerdict = "HOLDS" | "FAILS";
+
+export type FactKind =
+  /** A measured value against a threshold. */
+  | "NUMERIC"
+  /** Whether the disclosure says something, quoted verbatim. */
+  | "DISCLOSURE"
+  /** Whether the evidence needed to settle a claim exists at all. */
+  | "EVIDENCE_EXISTS";
+
+/**
+ * What kind of document a figure came from. This caps what a numeric fact may
+ * claim: an unaudited forecast can move the user's attention but can never make
+ * a fact hold.
+ */
+export type EvidenceNature =
+  | "AUDITED"
+  | "UNAUDITED_ACTUAL"
+  | "PRELIMINARY"
+  | "FORECAST"
+  | "NARRATIVE"
+  | "THIRD_PARTY";
+
+export interface Fact {
+  /** A single, binary, verifiable proposition. */
+  statement: string;
+  verdict: FactVerdict;
+  kind: FactKind;
+  nature: EvidenceNature;
+  /** Provenance — clickable through to the evidence drawer. */
+  source: { fileName: string; page: number; locator: string } | null;
+  /** Links to the argument whose calculation produced this fact, if any. */
+  argumentId?: string;
+  /**
+   * Why it fails, when it fails. Required for FAILS: a bare "不成立" without a
+   * reason is not an audit trail.
+   */
+  failReason?: string;
+}
+
+export interface Inference {
+  /** The judgement itself, worded with restraint. */
+  text: string;
+  /** 依据 — checkable facts or figures it rests on. */
+  basis: string;
+  /** 局限 — why it cannot be confirmed. */
+  limitation: string;
+  /** 缺口 — what would close it. */
+  gap: string;
+  /**
+   * Restraint level. Affects visual weight only; it never affects a fact and
+   * never contributes to the thesis status.
+   */
+  strength: "MODERATE" | "TENTATIVE";
+  /**
+   * Set when the inference rests on an unaudited forecast or express report, so
+   * the downgrade is stated rather than implied.
+   */
+  natureCaveat?: string;
+}
+
+export interface RoundFindings {
+  facts: Fact[];
+  inferences: Inference[];
+  /**
+   * Coverage statement, when this round's disclosure does not touch the thesis
+   * at all. Neither fact nor inference: a declaration that nothing was
+   * re-verified. Omitting it would let the system imply it had checked.
+   */
+  notTouched?: string;
+}
+
+/** Where a thesis came from — 用户已经拥有的观点 is not always in a report. */
+export type ThesisOrigin = "REPORT_EXTRACTED" | "USER_REVISED" | "USER_AUTHORED";
