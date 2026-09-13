@@ -305,3 +305,38 @@ export interface PhilosophyDemo {
     antiPattern: string;
   }>;
 }
+
+/* ------------------------------------------------------------------ */
+/* Presentation brief — the four-line card                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The compact card copy required by 01_产品定义与交互.md §4 and the wireframe
+ * in 10_前端实现设计.md §2. Kept separate from the verification data above so
+ * that the deep evidence model stays authoritative and the surface prose stays
+ * short: a card is four lines, and everything else is reachable by expanding.
+ *
+ * Field order follows DESIGN.md 信息层级:
+ *   旧观点 → 最新财报事实 → 差距 → 原因 → 下一步问题
+ */
+export interface ThesisBrief {
+  /** 最新事实 — the 1–3 most relevant figures, one line, with a [来源] hook. */
+  keyFact: string;
+  /** Page the key fact comes from; drives the [来源] affordance. */
+  keyFactSource: { fileName: string; page: number } | null;
+  /** 差距 — observedGap per 06 §8: how far actual is from target. */
+  gap: string | null;
+  /** 当前判断 — one substantive sentence, not a restatement of the status. */
+  assessment: string;
+  /** 接下来盯什么 — a concrete evidence request, never "持续关注". */
+  nextStep: string;
+  /**
+   * 本次变化 — set only when this thesis actually moved or gained evidence in
+   * this round. Drives the [本次变化] filter. Per 03 §2, a thesis the new
+   * report does not touch keeps its status but must say 本次无新增证据 rather
+   * than pretending to have been re-verified.
+   */
+  change: string | null;
+  /** True when the round produced no new evidence for this thesis. */
+  noNewEvidence?: boolean;
+}

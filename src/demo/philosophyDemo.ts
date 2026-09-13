@@ -27,13 +27,13 @@ export const PHILOSOPHY_DEMO: PhilosophyDemo = {
   meta: {
     company: "圣邦股份",
     securityCode: "300661",
-    exchange: "SZSE",
+    exchange: "SZ",
     industry: "模拟集成电路设计（Fabless）",
     accountingStandard: "中国企业会计准则 CAS",
     defaultScope: "合并报表 CONSOLIDATED",
     isSynthetic: true,
     dataNote:
-      "演示数据为合成样例，形态参照 A 股模拟芯片公司定期报告，非真实披露、不构成投资建议。真实管线（上传研报 → 提炼观点 → 财报核验）请切换到「真实研究管线」。",
+      "演示数据为合成样例，形态参照 A 股模拟芯片公司定期报告，非真实披露、不构成投资建议。真实管线（上传研报 → 提炼观点 → 财报核验）请切换到「真实工作台」。",
   },
 
   pillars: [

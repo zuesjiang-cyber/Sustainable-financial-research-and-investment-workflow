@@ -10,8 +10,9 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test tests/*.test.ts src/lib/*.test.ts",
-    "model:check": "node --import tsx scripts/check-model.ts"
+    "test": "node --import ./tests/fixtures/registerCssModules.mjs --import tsx --test tests/*.test.ts tests/*.test.tsx src/lib/*.test.ts",
+    "model:check": "node --import tsx scripts/check-model.ts",
+    "test:demo": "node --import ./tests/fixtures/registerCssModules.mjs --import tsx --test tests/demo-isolation.test.ts tests/demo-render.test.tsx"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
