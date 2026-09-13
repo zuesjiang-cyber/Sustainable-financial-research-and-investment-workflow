@@ -115,11 +115,11 @@ export const ReportUploadView: React.FC<ReportUploadViewProps> = ({
         <section className="demo-preview-card" aria-labelledby="demo-preview-title">
           <div className="demo-preview-head">
             <div>
-              <div className="demo-preview-kicker"><span className="demo-kicker-dot" /> Demo · 已完成核验</div>
+              <div className="demo-preview-kicker"><span className="demo-kicker-dot" /> Demo · 研究状态演进</div>
               <h2 id="demo-preview-title">先看结果，再决定是否上传</h2>
               <p>{DEMO_RESEARCH.company} · {DEMO_RESEARCH.ticker} · {DEMO_RESEARCH.period}</p>
             </div>
-            <span className="demo-readonly-mark"><LockKeyhole className="h-3 w-3" /> 只读样例</span>
+            <span className="demo-readonly-mark"><LockKeyhole className="h-3 w-3" /> 可交互体验</span>
           </div>
 
           <div className="demo-preview-insight">
@@ -155,9 +155,9 @@ export const ReportUploadView: React.FC<ReportUploadViewProps> = ({
           </div>
 
           <div className="demo-preview-foot">
-            <span><ShieldCheck className="h-4 w-4" /> 演示数据 · 每条结果保留差距、原因与下一问</span>
+            <span><ShieldCheck className="h-4 w-4" /> 载入财报 → 修正判断 → 确认版本 → 回看历史</span>
             <button type="button" onClick={onOpenDemo || (() => onStartAnalysis({ fileName: "FinTrust_Demo_State.md", isDemo: true }))} disabled={isAnalyzing} className="ft-btn ft-btn-primary">
-              查看完整核验 Demo <ArrowRight className="h-4 w-4" />
+              体验观点跟踪 Demo <ArrowRight className="h-4 w-4" />
             </button>
           </div>
         </section>
