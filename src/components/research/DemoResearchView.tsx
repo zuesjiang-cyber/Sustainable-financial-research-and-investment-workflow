@@ -190,7 +190,13 @@ export const DemoResearchView: React.FC<DemoResearchViewProps> = ({ onBackHome }
       </div>
 
       <section className="demo-thesis-grid">
-        {DEMO_RESEARCH.items.map((item, index) => <DemoThesisCard key={item.id} item={item} index={index} />)}
+        {DEMO_RESEARCH.items.map((item, index) => (
+          // React 19 no longer types `key` as a component prop, and this repo has
+          // no @types/react, so the list key lives on a fragment wrapper.
+          <React.Fragment key={item.id}>
+            <DemoThesisCard item={item} index={index} />
+          </React.Fragment>
+        ))}
       </section>
 
       <section className="demo-bottom-cta">

@@ -4,6 +4,15 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { PdfParserClient } from "../src/server/documents/pdfParser";
 import { ThesisExtractor } from "../src/server/documents/thesisExtractor";
+import { DEFAULT_OPENAI_MODEL } from "../src/server/researchModel";
+// These assertions describe real Ling extraction output, so the test is only
+// meaningful against a configured model. Rule-based or fixture fallback is
+// deliberately not allowed in the product (see v1Router.requireLing), so an
+// offline run skips instead of silently passing.
+const LING_READY = Boolean(process.env.FINTRUST_LLM_API_KEY)
+  && (process.env.FINTRUST_LLM_MODEL?.trim() || DEFAULT_OPENAI_MODEL) === DEFAULT_OPENAI_MODEL;
+const NEEDS_LING = LING_READY ? false : "requires FINTRUST_LLM_API_KEY with inclusionai/ling-3.0-flash-fin:free";
+
 
 test("PdfParserClient parses PDF into valid manifest and spans", async () => {
   const client = new PdfParserClient();
@@ -22,7 +31,7 @@ test("PdfParserClient parses PDF into valid manifest and spans", async () => {
   assert.equal(spans[0].regions[0].pageNumber, 1);
 });
 
-test("ThesisExtractor identifies company, date, and extracts atomic theses with criteria", async () => {
+test("ThesisExtractor identifies company, date, and extracts atomic theses with criteria", { skip: NEEDS_LING }, async () => {
   const extractor = new ThesisExtractor();
   const docId = crypto.randomUUID();
   const parseId = crypto.randomUUID();

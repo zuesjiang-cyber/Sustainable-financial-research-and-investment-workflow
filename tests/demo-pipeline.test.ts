@@ -7,6 +7,11 @@ import { V1Store } from "../src/server/v1/v1Store";
 test("FinTrust Demo Pipeline: run-demo-t0 -> draft -> confirm -> project creation", async () => {
   const store = new V1Store();
   const router = createV1Router({ store });
+  // `handle` is express' dispatch entry point and is not on the public Router
+  // type; the fake req/res pair below needs it to drive the router directly.
+  const dispatch = (router as unknown as {
+    handle: (req: unknown, res: unknown, next: (error?: unknown) => void) => void;
+  }).handle.bind(router);
 
   function mockRequestResponse(reqOptions: { method: string; url: string; body?: any }) {
     const req = Object.assign(new EventEmitter(), {
@@ -34,7 +39,7 @@ test("FinTrust Demo Pipeline: run-demo-t0 -> draft -> confirm -> project creatio
         },
       });
 
-      router.handle(req as any, res as any, (err: any) => {
+      dispatch(req as any, res as any, (err: any) => {
         if (err) {
           resolve({ status: err.statusCode || 500, body: { error: err.message } });
         } else {

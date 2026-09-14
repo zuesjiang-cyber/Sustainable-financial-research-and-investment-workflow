@@ -11,6 +11,15 @@ import { ContextCompiler } from "../src/server/memory/contextCompiler";
 import { DiffGenerator } from "../src/server/memory/diffGenerator";
 import { StateManager } from "../src/server/memory/stateManager";
 import { ResearchExporter } from "../src/server/export/researchExporter";
+import { DEFAULT_OPENAI_MODEL } from "../src/server/researchModel";
+// These assertions describe real Ling extraction output, so the test is only
+// meaningful against a configured model. Rule-based or fixture fallback is
+// deliberately not allowed in the product (see v1Router.requireLing), so an
+// offline run skips instead of silently passing.
+const LING_READY = Boolean(process.env.FINTRUST_LLM_API_KEY)
+  && (process.env.FINTRUST_LLM_MODEL?.trim() || DEFAULT_OPENAI_MODEL) === DEFAULT_OPENAI_MODEL;
+const NEEDS_LING = LING_READY ? false : "requires FINTRUST_LLM_API_KEY with inclusionai/ling-3.0-flash-fin:free";
+
 import type {
   ThesisRevision,
   ThesisAssessment,
@@ -20,7 +29,7 @@ import type {
   Fact,
 } from "../src/shared/domain";
 
-test("FinTrust V1 Acceptance: Full 6-Criterion End-to-End Lifecycle", async () => {
+test("FinTrust V1 Acceptance: Full 6-Criterion End-to-End Lifecycle", { skip: NEEDS_LING }, async () => {
   // =========================================================================
   // CRITERION 1 & 6: Multi-Company Dynamic Extraction (Not hardcoded for one)
   // =========================================================================

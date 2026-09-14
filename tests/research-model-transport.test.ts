@@ -203,9 +203,12 @@ test("empty and HTTP-error responses fail without leaking provider body or key",
     fetch: async () => jsonResponse({ choices: [{ message: { role: "assistant", content: "   " } }] }),
   });
   assert.ok(emptyTransport);
+  // An empty assistant turn carries the provider diagnostics the UI shows
+  // (finish_reason / output_tokens); the contract under test is that it fails
+  // closed instead of returning blank JSON.
   await assert.rejects(
     emptyTransport.complete({ messages: [{ role: "user", content: "empty" }], tools: [] }),
-    /did not contain text or a tool call/
+    /response was empty/
   );
 
   const errorTransport = createConfiguredResearchModelTransport(OPENROUTER_ENV, {
@@ -243,7 +246,11 @@ test("missing key and wrong model fail closed without touching fetch or Gemini",
   });
   assert.equal(explicitMissing.configured, false);
   assert.match(explicitMissing.reason || "", /FINTRUST_LLM_API_KEY/);
-  assert.equal(getModelConfiguration({ GEMINI_API_KEY: "gemini-offline-key" }).provider, "gemini");
+  // Gemini is legacy config only: it is no longer a routable provider, so a
+  // lone GEMINI_API_KEY must not resolve to any transport.
+  const geminiOnly = getModelConfiguration({ GEMINI_API_KEY: "gemini-offline-key" });
+  assert.equal(geminiOnly.configured, false);
+  assert.equal(geminiOnly.provider, undefined);
 
   const wrongModel = await runModelCheck({
     env: { ...OPENROUTER_ENV, FINTRUST_LLM_MODEL: "some-other-model" },

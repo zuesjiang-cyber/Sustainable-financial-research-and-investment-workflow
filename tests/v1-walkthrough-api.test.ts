@@ -6,14 +6,24 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { tmpdir } from "node:os";
 import { createApp } from "../src/server/app";
+import { DEFAULT_OPENAI_MODEL } from "../src/server/researchModel";
 import type { Server } from "node:http";
 
-test("FinTrust V1 Walkthrough HTTP API: upload -> T0 -> T1 -> T2 with stable thesis IDs", async () => {
+// The walkthrough covers the real HTTP main path (run -> T0 -> T1 -> T2), and
+// that path refuses any non-Ling fallback, so a configured key is a hard
+// precondition rather than something to stub out here.
+const LING_READY = Boolean(process.env.FINTRUST_LLM_API_KEY)
+  && (process.env.FINTRUST_LLM_MODEL?.trim() || DEFAULT_OPENAI_MODEL) === DEFAULT_OPENAI_MODEL;
+
+test(
+  "FinTrust V1 Walkthrough HTTP API: upload -> T0 -> T1 -> T2 with stable thesis IDs",
+  { skip: LING_READY ? false : "requires FINTRUST_LLM_API_KEY with inclusionai/ling-3.0-flash-fin:free" },
+  async () => {
   const dataDir = mkdtempSync(path.join(tmpdir(), "fintrust-v1-walkthrough-db-"));
   const storageRoot = mkdtempSync(path.join(tmpdir(), "fintrust-v1-walkthrough-storage-"));
   process.env.FINTRUST_DATA_DIR = dataDir;
   process.env.FINTRUST_UPLOAD_STORAGE_DIR = storageRoot;
-  delete process.env.FINTRUST_LLM_API_KEY;
+  // The legacy Gemini path must never be used, even if its key is present.
   delete process.env.GEMINI_API_KEY;
   const app = await createApp();
   let server: Server;
