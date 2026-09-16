@@ -1,12 +1,8 @@
 import React from "react";
 import { Activity, FileText, ShieldCheck, Sparkles } from "lucide-react";
-import { ReportFirstContainer } from "./components/research/ReportFirstContainer";
+import { V2Workspace } from "./components/v2/V2Workspace";
+import "./v2.css";
 
-/**
- * FinTrust V1 has one clear entry point: a report-first research workspace.
- * The legacy test bench and the older SQLite demo shell are intentionally not
- * exposed here; the real V1 workflow remains inside ReportFirstContainer.
- */
 export default function App() {
   return (
     <div className="min-h-screen bg-[#f6f8fc] text-slate-900 font-sans">
@@ -17,33 +13,30 @@ export default function App() {
             <div>
               <div className="app-brand-name">
                 <span>FinTrust</span>
-                <span className="app-brand-product">Research Workspace</span>
+                <span className="app-brand-product">Continuous Research</span>
               </div>
-              <p className="app-brand-caption">研报观点持续核验 · 面向分析师的研究记忆工作台</p>
+              <p className="app-brand-caption">输入观点或材料 · 后台核验 · 重要变化提醒 · 下一轮继承</p>
             </div>
           </div>
-
           <div className="app-header-meta">
             <span className="app-header-chip">
               <FileText className="h-3.5 w-3.5" />
-              Markdown Research Memory
+              SQLite 为运行依据
             </span>
             <span className="app-header-model">
               <Sparkles className="h-3.5 w-3.5" />
-              Ling-3.0-Flash-Fin
+              快速 / 研究 / 复核
             </span>
-            <span className="app-header-status"><Activity className="h-3.5 w-3.5" /> V1</span>
+            <span className="app-header-status"><Activity className="h-3.5 w-3.5" /> V2</span>
           </div>
         </div>
       </header>
-
       <main>
-        <ReportFirstContainer />
+        <V2Workspace />
       </main>
-
       <footer className="app-footer">
-        <span>FinTrust V1 · 用户确认优先，证据位置可追溯</span>
-        <span>Research Memory 以本地 Markdown 状态跨轮继承</span>
+        <span>FinTrust V2 · 用户立场与 AI 分析分离，未核实线索不进入事实评估</span>
+        <span>默认跟踪 5 家沪深公司 · 历史回放与真实研究隔离</span>
       </footer>
     </div>
   );

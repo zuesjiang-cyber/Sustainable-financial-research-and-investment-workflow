@@ -21,6 +21,29 @@ def compute_sha256(file_path: str) -> str:
             h.update(chunk)
     return h.hexdigest()
 
+def bbox_for_text(words, text, width, height):
+    """Map a paragraph back onto pdfplumber word boxes instead of a page-sized placeholder."""
+    needle = re.sub(r"\s+", "", text or "")[:48]
+    if not words or not needle:
+        return [0.05, 0.05, 0.95, 0.95]
+    acc = ""
+    start = 0
+    for i, word in enumerate(words):
+        acc += word.get("text") or ""
+        while start <= i and len(re.sub(r"\s+", "", acc)) > len(needle) + 24:
+            acc = acc[len(words[start].get("text") or ""):]
+            start += 1
+        compact = re.sub(r"\s+", "", acc)
+        if needle and needle in compact:
+            subset = words[start:i + 1]
+            x0 = min(float(item["x0"]) for item in subset)
+            top = min(float(item["top"]) for item in subset)
+            x1 = max(float(item["x1"]) for item in subset)
+            bottom = max(float(item["bottom"]) for item in subset)
+            return normalize_bbox([x0, top, x1, bottom], width, height)
+    return [0.05, 0.05, 0.95, 0.95]
+
+
 def normalize_bbox(raw_bbox, width, height):
     """Normalize bbox [x0, top, x1, bottom] to 0..1 coordinates."""
     if not raw_bbox:
@@ -102,7 +125,8 @@ def parse_pdf_plumber(pdf_path: str, doc_id: str):
                     "continuationOf": None,
                 })
 
-            # 2. Extract Text Blocks
+            # 2. Extract Text Blocks with real word coordinates.
+            words = page.extract_words(use_text_flow=True, keep_blank_chars=False) or []
             text = page.extract_text(layout=True) or ""
             total_text_chars += len(text.strip())
 
@@ -119,6 +143,7 @@ def parse_pdf_plumber(pdf_path: str, doc_id: str):
                 # Heuristic heading detection
                 is_heading = len(clean_text) < 40 and re.match(r"^(一|二|三|四|五|六|七|八|九|十|\d+[\.\、]|第[一二三四五]|\#)", clean_text)
                 b_type = "HEADING" if is_heading else "PARAGRAPH"
+                bbox = bbox_for_text(words, clean_text, w, h)
 
                 blocks.append({
                     "id": b_id,
@@ -127,7 +152,7 @@ def parse_pdf_plumber(pdf_path: str, doc_id: str):
                     "text": clean_text,
                     "regions": [{
                         "pageNumber": page_num,
-                        "bbox": [0.05, 0.05, 0.95, 0.95] # Page bounded
+                        "bbox": bbox,
                     }],
                 })
 

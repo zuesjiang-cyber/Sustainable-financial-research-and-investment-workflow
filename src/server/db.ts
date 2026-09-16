@@ -1,6 +1,7 @@
 import initSqlJs, { Database } from "sql.js";
 import fs from "fs";
 import path from "path";
+import { initV2Schema } from "./v2/schema";
 
 export interface ProjectRecord {
   id: string;
@@ -429,6 +430,8 @@ function initSchema(db: Database): void {
   ensureColumn(db, "research_updates", "payload_hash", "TEXT");
 
   ensureColumn(db, "questions", "evidence_ids_json", "TEXT");
+
+  initV2Schema(db);
 
   // The partial index is an optimization and a second line of defence for
   // request idempotency. Old databases with duplicate request ids are still

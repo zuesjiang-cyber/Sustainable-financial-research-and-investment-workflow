@@ -1,0 +1,260 @@
+.v2-shell {
+  width: min(1440px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 18px 0 36px;
+}
+
+.v2-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+
+.v2-nav button,
+.v2-nav-bell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  border: 1px solid #dfe7f1;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 12px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.v2-nav button.is-active {
+  border-color: #c9d9f7;
+  background: #eff5ff;
+  color: #185adb;
+}
+
+.v2-nav-bell {
+  margin-left: auto;
+  cursor: default;
+}
+
+.v2-hero h1,
+.v2-replay h1,
+.v2-settings h1,
+.v2-company-hero h1 {
+  margin: 12px 0 8px;
+  color: #10213f;
+  font-size: clamp(26px, 3vw, 38px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.v2-hero p,
+.v2-replay > p,
+.v2-settings > p {
+  max-width: 760px;
+  color: #63748c;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.v2-composer,
+.v2-panel,
+.v2-company-hero,
+.v2-prelim {
+  padding: 18px;
+}
+
+.v2-composer {
+  margin: 18px 0;
+}
+
+.v2-composer-input {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.v2-composer-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.v2-composer-hint,
+.v2-empty,
+.v2-status-line,
+.v2-coverage {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  color: #8492a7;
+  font-size: 12px;
+}
+
+.v2-home-grid,
+.v2-company-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.v2-panel-head,
+.v2-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.v2-panel h2,
+.v2-drawer h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  color: #203958;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.v2-project-list,
+.v2-event-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.v2-project-list button,
+.v2-event-list button,
+.v2-note-item {
+  width: 100%;
+  border: 1px solid #e0e7f0;
+  border-radius: 8px;
+  background: #f9fbfd;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.v2-project-list strong,
+.v2-event-list strong,
+.v2-note-item strong {
+  display: block;
+  color: #10213f;
+}
+
+.v2-project-list span,
+.v2-event-list em,
+.v2-note-item p {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.v2-quote {
+  border-left: 3px solid #9db7dc;
+  padding-left: 10px;
+  color: #203958;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.v2-prelim-cols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.v2-prelim-cols p {
+  color: #526681;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.v2-pill {
+  display: inline-flex;
+  margin-right: 8px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.v2-pill-verified { background: #effaf5; color: #16865d; }
+.v2-pill-unverified, .v2-pill-rejected { background: #fff9ea; color: #b87812; }
+.v2-pill-corrected { background: #fff4f5; color: #cc4b54; }
+
+.v2-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(16, 33, 63, 0.28);
+}
+
+.v2-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(460px, 100%);
+  height: 100%;
+  overflow: auto;
+  background: #fff;
+  padding: 20px;
+  box-shadow: -12px 0 40px rgba(16, 33, 63, 0.12);
+}
+
+.v2-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.v2-meta-grid dt {
+  color: #8492a7;
+  font-size: 11px;
+}
+
+.v2-meta-grid dd {
+  margin: 3px 0 0;
+  color: #203958;
+  font-size: 12px;
+}
+
+.v2-note {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+  color: #566b86;
+  font-size: 12px;
+}
+
+.v2-candidate-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.v2-legacy {
+  display: grid;
+  gap: 12px;
+}
+
+.v2-company,
+.v2-settings,
+.v2-replay,
+.v2-home {
+  display: grid;
+  gap: 14px;
+}
+
+@media (max-width: 900px) {
+  .v2-shell { width: calc(100% - 24px); }
+  .v2-home-grid,
+  .v2-company-grid,
+  .v2-prelim-cols,
+  .v2-composer-row { grid-template-columns: 1fr; flex-direction: column; }
+}

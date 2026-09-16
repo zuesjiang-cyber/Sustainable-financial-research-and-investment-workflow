@@ -11,8 +11,12 @@ import { demoProjectInput, demoMaterial, runDemoReplay } from "./demoReplay";
 import { SAMPLE_T2_MATERIAL, loadCaseInput, getInitialSbgProject } from "./seedData";
 import { LocalUploadService, MAX_UPLOAD_BYTES, validateUploadFile, type UploadServiceOptions } from "./documents/uploadService";
 import { createV1Router } from "./v1/v1Router";
+import { createV2Router, createV2Runtime } from "./v2/v2Router";
+import { V2Worker } from "./v2/worker";
+import { MonitorScheduler } from "./v2/monitor";
 import type { ResearchModelTransport } from "./researchModel";
 import type { ContinuousAnalysisResult, FollowUpQuestion, ProjectState, ResearchThesis, ThesisDelta, ThesisStatus } from "../types/fintrust";
+import type { V2RouterOptions } from "./v2/v2Router";
 
 const THESIS_STATUSES: ThesisStatus[] = ["加强", "保持", "削弱", "待评估", "支持", "部分支持", "不足以判断"];
 const QUESTION_STATUSES = ["未解决", "部分解决", "已解决"];
@@ -82,7 +86,7 @@ function createProject(input: any): ProjectState {
 }
 
 /** Testable API factory: no listener or paid model call during import. */
-export async function createApp(options: { analyze?: typeof runContinuousAnalysis; upload?: UploadServiceOptions; modelTransport?: ResearchModelTransport | null } = {}) {
+export async function createApp(options: { analyze?: typeof runContinuousAnalysis; upload?: UploadServiceOptions; modelTransport?: ResearchModelTransport | null; v2?: V2RouterOptions; disableV2Worker?: boolean } = {}) {
   await initProjects();
   const app = express();
   app.use(express.json({ limit: "4mb" }));
@@ -142,6 +146,20 @@ export async function createApp(options: { analyze?: typeof runContinuousAnalysi
     res.status(201).json(receipt);
   }));
   app.use("/v1", createV1Router({ uploadService, modelTransport: options.modelTransport }));
+  const v2Options: V2RouterOptions = { ...(options.v2 || {}), uploadService, modelTransport: options.v2?.modelTransport ?? options.modelTransport };
+  app.use("/v2", createV2Router(v2Options));
+  if (!options.disableV2Worker && !process.env.NODE_TEST_CONTEXT) {
+    const runtime = createV2Runtime(v2Options);
+    const worker = new V2Worker(runtime.queue, runtime.engine, runtime.store);
+    worker.start(800);
+    const monitor = new MonitorScheduler(runtime.store, runtime.queue);
+    setInterval(() => {
+      monitor.scheduleDueProjects().catch((error) => console.error("[v2-monitor]", error));
+    }, 30_000);
+    setTimeout(() => {
+      monitor.scheduleDueProjects().catch((error) => console.error("[v2-monitor]", error));
+    }, 1500);
+  }
   app.get("/api/sample-materials/demo/:version", route((req, res) => res.json(demoMaterial(req.params.version))));
   app.get("/api/projects/:id/context", route(async (req, res) => res.json(buildResearchContext(await projectFor(req.params.id), typeof req.query.targetVersion === "string" ? req.query.targetVersion : undefined))));
   app.post("/api/projects/:id/analyze-material", route(async (req, res) => {

@@ -7,7 +7,10 @@ import { createApp } from "./src/server/app";
 async function startServer() {
   const app = await createApp();
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
+    const vite = await createViteServer({
+      server: { middlewareMode: true, host: "0.0.0.0", allowedHosts: true },
+      appType: "spa",
+    });
     app.use(vite.middlewares);
   } else {
     const dist = path.resolve("dist");
@@ -15,7 +18,7 @@ async function startServer() {
     app.get("*", (_req, res) => res.sendFile(path.join(dist, "index.html")));
   }
   const port = Number(process.env.PORT || 3000);
-  const host = process.env.HOST || "127.0.0.1";
+  const host = process.env.HOST || "0.0.0.0";
   app.listen(port, host, () => console.log(`[FinTrust] http://${host}:${port}`));
 }
 
