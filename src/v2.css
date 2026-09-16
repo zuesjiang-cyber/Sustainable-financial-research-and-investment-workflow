@@ -98,6 +98,26 @@
   white-space: nowrap;
 }
 
+.v2-company-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.v2-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  color: #334155;
+  font-size: 13px;
+}
+
+.v2-note-item {
+  cursor: pointer;
+}
+
 .v2-home-grid,
 .v2-company-grid {
   display: grid;

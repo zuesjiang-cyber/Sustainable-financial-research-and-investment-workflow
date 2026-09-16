@@ -45,6 +45,7 @@ async function callTool(ctx: AgentContext, name: string, args: Record<string, un
     ? String((result as { error?: string }).error)
     : `${name} 完成`;
   pushEvent(run, "tool", summary, { tool: name });
+  await ctx.persist?.();
   return result;
 }
 

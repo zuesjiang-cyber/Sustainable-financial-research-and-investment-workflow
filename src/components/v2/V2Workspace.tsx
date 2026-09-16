@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, Clapperboard, Home, Settings, ShieldCheck } from "lucide-react";
 import { ResearchHome } from "./ResearchHome";
 import { CompanyResearchPage } from "./CompanyResearchPage";
@@ -18,43 +18,84 @@ export const V2Workspace: React.FC = () => {
   const [run, setRun] = useState<any | null>(null);
   const [evidence, setEvidence] = useState<any | null>(null);
   const [drawer, setDrawer] = useState(false);
+  const [health, setHealth] = useState<any | null>(null);
+  const knownNotes = useRef(new Set<string>());
+  const stopRef = useRef<(() => void) | null>(null);
 
   const refresh = useCallback(async () => {
-    const [list, notes] = await Promise.all([
+    const [list, notes, status] = await Promise.all([
       v2<any[]>("/v2/projects"),
       v2<any[]>("/v2/notifications"),
+      v2<any>("/v2/health").catch(() => null),
     ]);
     setProjects(list);
     setNotifications(notes);
+    setHealth(status);
     if (project?.id) {
       const fresh = await v2<any>(`/v2/projects/${project.id}`);
       setProject(fresh);
     }
+    for (const note of notes) {
+      if (note.readAt || knownNotes.current.has(note.id)) continue;
+      knownNotes.current.add(note.id);
+      const watching = Boolean(freshBrowserNotify(project) || list.find((item) => item.id === note.projectId)?.monitoring);
+      if (watching && note.importance === "HIGH" && typeof Notification !== "undefined" && Notification.permission === "granted") {
+        new Notification(note.title, { body: note.body });
+      }
+    }
   }, [project?.id]);
 
   useEffect(() => { refresh().catch(() => undefined); }, [refresh]);
+  useEffect(() => {
+    const timer = setInterval(() => { refresh().catch(() => undefined); }, 12_000);
+    return () => clearInterval(timer);
+  }, [refresh]);
+
+  const listen = (projectId: string, runId: string) => {
+    stopRef.current?.();
+    stopRef.current = subscribeRun(runId, (event, data) => {
+      if (event === "state") setRun((current: any) => ({ ...(current || {}), ...data, id: runId }));
+      if (event === "progress") setRun((current: any) => {
+        const events = [...(current?.events || [])];
+        if (data?.seq && !events.some((item: any) => item.seq === data.seq)) events.push(data);
+        return { ...(current || {}), id: runId, events };
+      });
+      if (event === "done") {
+        stopRef.current?.();
+        openProject(projectId).catch(() => undefined);
+      }
+    });
+  };
 
   const openProject = async (id: string) => {
     const fresh = await v2<any>(`/v2/projects/${id}`);
     setProject(fresh);
     setView("project");
+    const active = (fresh.runs || []).find((item: any) => item.status === "RUNNING" || item.status === "PARTIAL" || item.status === "QUEUED");
+    if (active) {
+      setRun(active);
+      if (active.status === "RUNNING" || active.status === "QUEUED" || active.status === "PARTIAL") listen(id, active.id);
+    }
   };
 
   const onCreated = (projectId: string, runId: string) => {
     openProject(projectId).catch(() => undefined);
-    const stop = subscribeRun(runId, (event, data) => {
-      if (event === "state") setRun((current: any) => ({ ...(current || {}), ...data, id: runId }));
-      if (event === "done") {
-        stop();
-        openProject(projectId).catch(() => undefined);
-      }
-    });
+    listen(projectId, runId);
   };
 
   const openEvidence = async (id: string) => {
     const item = await v2(`/v2/evidence/${id}`);
     setEvidence(item);
     setDrawer(true);
+  };
+
+  const onOpenNotification = async (item: any) => {
+    if (item.projectId) await openProject(item.projectId);
+    if (item.eventIds?.[0]) {
+      const projectFresh = await v2<any>(`/v2/projects/${item.projectId}`);
+      const event = projectFresh.events?.find((row: any) => row.id === item.eventIds[0]);
+      if (event?.evidenceIds?.[0]) await openEvidence(event.evidenceIds[0]);
+    }
   };
 
   return (
@@ -70,9 +111,11 @@ export const V2Workspace: React.FC = () => {
         <ResearchHome
           projects={projects}
           notifications={notifications}
+          health={health}
           onOpenProject={openProject}
           onCreated={onCreated}
           onRefresh={refresh}
+          onOpenNotification={onOpenNotification}
         />
       )}
       {view === "project" && project && (
@@ -90,3 +133,7 @@ export const V2Workspace: React.FC = () => {
     </div>
   );
 };
+
+function freshBrowserNotify(project: any | null): boolean {
+  return Boolean(project?.monitoring?.browserNotify);
+}

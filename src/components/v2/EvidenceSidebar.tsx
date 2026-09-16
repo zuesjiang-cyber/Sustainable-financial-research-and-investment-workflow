@@ -13,7 +13,7 @@ export const EvidenceSidebar: React.FC<{
       <aside className="v2-drawer" onClick={(event) => event.stopPropagation()}>
         <div className="v2-drawer-head">
           <div>
-            <div className="ft-eyebrow"><FileSearch className="h-3.5 w-3.5" /> 证据侧栏</div>
+            <div className="ft-eyebrow"><FileSearch className="h-3.5 w-3.5" /> 证据</div>
             <h2>{item?.title || "证据"}</h2>
           </div>
           <button type="button" className="ft-btn-icon" onClick={onClose}><X className="h-4 w-4" /></button>
@@ -28,8 +28,14 @@ export const EvidenceSidebar: React.FC<{
               <div><dt>发现时间</dt><dd>{item.discoveredAt}</dd></div>
               <div><dt>页码 / 坐标</dt><dd>{item.page || "—"} {item.bbox ? JSON.stringify(item.bbox) : ""}</dd></div>
               <div><dt>转载合并</dt><dd>{item.reprintOf || item.originKey}</dd></div>
+              <div><dt>解析质量</dt><dd>{item.quality}</dd></div>
+              <div><dt>公司 / 代码</dt><dd>{item.companyName || "—"} {item.securityCode || ""}</dd></div>
             </dl>
-            {item.documentId && <p className="v2-empty">已绑定 PDF 文档 {item.documentId}，页码与坐标来自解析器，不是模型估算。</p>}
+            {item.documentId && (
+              <a className="ft-btn-soft" href={`/v2/documents/${item.documentId}/original`} target="_blank" rel="noreferrer">
+                打开已解析 PDF 原件
+              </a>
+            )}
             {item.url && (
               <a className="ft-btn-soft" href={item.url} target="_blank" rel="noreferrer">
                 <Link2 className="h-3.5 w-3.5" /> 打开原始网页
@@ -43,13 +49,13 @@ export const EvidenceSidebar: React.FC<{
               <section>
                 <h3>核验结果</h3>
                 {evidence.events.map((event: any) => (
-                  <p key={event.id}><strong>{event.verification}</strong> · {event.proposition}</p>
+                  <p key={event.id}><strong>{event.verification}</strong> · {event.stage} · {event.proposition}</p>
                 ))}
               </section>
             )}
             {Array.isArray(evidence?.analyses) && evidence.analyses.length > 0 && (
               <section>
-                <h3>推论依据</h3>
+                <h3>依赖这条证据的分析</h3>
                 {evidence.analyses.map((analysis: any) => (
                   <p key={analysis.id}>{analysis.text}</p>
                 ))}

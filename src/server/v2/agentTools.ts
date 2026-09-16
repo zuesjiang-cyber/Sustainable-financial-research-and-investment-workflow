@@ -108,6 +108,7 @@ export interface AgentContext {
   clock: () => Date;
   newEvents: ResearchEvent[];
   notes: { completed: string[]; unresolved: string[]; supported: string[]; needsRevision: string[] };
+  persist?: () => Promise<void>;
 }
 
 export function overlapSince(lastSuccessAt: string | null, now: Date, firstLookbackMonths = 12): string {

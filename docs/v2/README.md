@@ -23,6 +23,7 @@ npm run dev
 | GET | `/v2/projects` `/v2/projects/:id` | 首页与完整记录 |
 | POST | `/v2/projects/:id/messages` | 先保存用户原话 |
 | POST | `/v2/projects/:id/research-runs` | 手动检查或深入研究 |
+| POST | `/v2/projects/:id/valuation` | 仅在价格日期、口径、假设齐全后接受；否则拒绝点估计 |
 | GET | `/v2/evidence/:id` | 原文、核验与依赖 |
 | GET/POST | `/v2/notifications` `/v2/notifications/:id/read` | 提醒与已读 |
 | PATCH | `/v2/projects/:id/monitoring` | 跟踪与提醒偏好 |

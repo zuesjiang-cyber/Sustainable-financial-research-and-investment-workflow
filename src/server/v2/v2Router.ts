@@ -155,7 +155,7 @@ export function createV2Router(options: V2RouterOptions = {}): Router {
         cursor = event.seq;
         res.write(`event: progress\ndata: ${JSON.stringify(event)}\n\n`);
       }
-      res.write(`event: state\ndata: ${JSON.stringify({ status: run.status, preliminary: run.preliminary, coverage: run.coverage, resultSummary: run.resultSummary })}\n\n`);
+      res.write(`event: state\ndata: ${JSON.stringify({ status: run.status, preliminary: run.preliminary, coverage: run.coverage, resultSummary: run.resultSummary, modelCalls: run.modelCalls, documentsRead: run.documentsRead, limits: run.limits, events: run.events })}\n\n`);
       if (run.status === "COMPLETED" || run.status === "FAILED" || run.status === "BUDGET_PAUSED") {
         res.write(`event: done\ndata: ${JSON.stringify({ status: run.status })}\n\n`);
         res.end();
@@ -295,13 +295,50 @@ export function createV2Router(options: V2RouterOptions = {}): Router {
     res.json({ file, markdown: true });
   }));
 
-  router.post("/tools/calculate", wrap(async (req, res) => {
-    // Deterministic calculator reused from existing research tools. Callers must
-    // supply project-local evidence; this endpoint never invents operands.
-    throw statusError("请在研究任务内通过证据绑定的计算工具执行，避免脱离原文的估值", 400);
+  router.post("/projects/:id/valuation", wrap(async (req, res) => {
+    const project = await store.getProject(req.params.id);
+    if (!project) throw statusError("项目不存在", 404);
+    const priceDate = String(req.body?.priceDate || "").trim();
+    const accountingScope = String(req.body?.accountingScope || "").trim();
+    const assumptions = Array.isArray(req.body?.assumptions) ? req.body.assumptions.map(String).map((item: string) => item.trim()).filter(Boolean) : [];
+    const missing: string[] = [];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(priceDate)) missing.push("价格日期");
+    if (!["CONSOLIDATED", "PARENT", "SEGMENT"].includes(accountingScope)) missing.push("会计口径（合并/母公司/分部）");
+    if (assumptions.length < 1) missing.push("必要假设");
+    if (missing.length) {
+      throw statusError(`估值前提不足：缺少${missing.join("、")}。不会给出点估计。`, 400);
+    }
+    const verified = project.events.filter((item) => item.verification === "VERIFIED");
+    if (!verified.length) {
+      return res.json({
+        status: "INCOMPLETE",
+        pointEstimate: null,
+        priceDate,
+        accountingScope,
+        assumptions,
+        reason: "价格日期、口径与假设已齐，但没有已核实财务事实，不给出点估计。",
+        missingFacts: ["已核实且可引用的收入/利润/现金流原文数字"],
+      });
+    }
+    return res.json({
+      status: "QUALITATIVE_ONLY",
+      pointEstimate: null,
+      priceDate,
+      accountingScope,
+      assumptions,
+      reason: "前提已齐，但仍缺少绑定证据的价格与财务操作数，因此不做数值估值。预算限制调用次数，不降低证据标准。",
+      relatedEvents: verified.slice(0, 8).map((item) => ({ id: item.id, description: item.description, verification: item.verification })),
+    });
   }));
 
-  void uploadService;
+  router.get("/documents/:id/original", wrap(async (req, res) => {
+    const buffer = await uploadService.getOriginal(req.params.id);
+    if (!buffer) throw statusError("文档不存在或不是已解析 PDF", 404);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${req.params.id}.pdf"`);
+    res.send(buffer);
+  }));
+
   void FAST_LIMITS;
   void calculateFinancialMetrics;
 

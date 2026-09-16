@@ -89,6 +89,13 @@ test("V2 HTTP: 输入一句话得到初步判断，后台核验不把失败标�
     const live = await fetch(`${base}/v2/projects`);
     const liveList = await live.json() as any[];
     assert.equal(liveList.some((item) => item.id === replayProject.id), false);
+
+    const valuation = await fetch(`${base}/v2/projects/${body.projectId}/valuation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ priceDate: "not-a-date", accountingScope: "CONSOLIDATED", assumptions: ["永续增长"] }),
+    });
+    assert.equal(valuation.status, 400);
   } finally {
     await new Promise<void>((resolve, reject) => server!.close((err) => err ? reject(err) : resolve()));
     rmSync(dataDir, { recursive: true, force: true });

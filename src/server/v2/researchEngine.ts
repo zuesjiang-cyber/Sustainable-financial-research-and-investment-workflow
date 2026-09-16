@@ -304,6 +304,9 @@ export class ResearchEngine {
       clock: this.deps.clock || (() => new Date()),
       newEvents: [],
       notes: { completed: [], unresolved: [], supported: [], needsRevision: [] },
+      persist: async () => {
+        await this.deps.store.saveRun(run);
+      },
     };
 
     await runScriptedAgent(ctx, mode);
