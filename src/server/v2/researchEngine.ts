@@ -1,11 +1,8 @@
 import crypto from "node:crypto";
 import type {
-  AnalysisRecord,
   EvidenceRecord,
   MaterialView,
   PreliminaryJudgment,
-  ResearchEvent,
-  ResearchLead,
   V2Notification,
   V2Project,
   V2Run,
@@ -14,16 +11,17 @@ import type {
 import { BACKGROUND_LIMITS, DEEP_LIMITS, FAST_LIMITS } from "../../shared/v2Domain";
 import { identifyCompanies, resolveIdentity } from "./companyCatalog";
 import { classifyUserInput, createStanceVersion, extractMaterialViews } from "./stance";
-import { canonicalOrigin, hashText, mergeSameOriginEvents, uniqueOriginEvidence, verifyProposition } from "./verification";
-import { judgeImportance } from "./importance";
+import { canonicalOrigin, hashText, uniqueOriginEvidence } from "./verification";
 import type { V2Store } from "./v2Store";
 import type { CninfoDisclosureClient } from "./disclosures";
 import type { TavilyClient } from "./tavily";
 import { fetchPublicPage } from "./webFetch";
 import type { LocalUploadService } from "../documents/uploadService";
-import { completeWithTransport, type ResearchModelTransport } from "../researchModel";
+import { completeWithTransport } from "../researchModel";
 import type { RoleTransports } from "./modelRoles";
 import { BudgetGuard, estimateModelCny } from "./budget";
+import { applyVerifiedAnalyses, maybeDailyDigest, runModelAgent, runScriptedAgent, type BackgroundMode } from "./agentLoop";
+import type { AgentContext } from "./agentTools";
 
 export interface EngineDeps {
   store: V2Store;
@@ -105,6 +103,7 @@ export class ResearchEngine {
           lastExternalCheckAt: null,
           lastOfficialSuccessAt: null,
           lastExternalSuccessAt: null,
+          lastDigestAt: null,
         },
       });
     } else if (identity.status === "IDENTIFIED" && !project.company) {
@@ -278,16 +277,13 @@ export class ResearchEngine {
     };
   }
 
-  async runBackground(runId: string, mode: "BACKGROUND" | "DEEP" | "MONITOR_OFFICIAL" | "MONITOR_EXTERNAL" = "BACKGROUND"): Promise<V2Run> {
+  async runBackground(runId: string, mode: BackgroundMode = "BACKGROUND"): Promise<V2Run> {
     const run = await this.deps.store.getRun(runId);
     if (!run) throw new Error("Run 不存在");
     const project = await this.deps.store.getProject(run.projectId);
     if (!project) throw new Error("项目不存在");
-    if (project.isReplay && mode !== "BACKGROUND") {
-      // Replay still can compute, but monitoring is isolated by isReplay flag.
-    }
     run.status = "RUNNING";
-    run.events.push({ seq: run.events.length + 1, at: this.clock(), phase: "background", message: mode === "DEEP" ? "开始深入研究" : "开始必要后台研究" });
+    run.events.push({ seq: run.events.length + 1, at: this.clock(), phase: "background", message: mode === "DEEP" ? "开始围绕最大缺口的深入研究" : "开始工具链后台研究" });
 
     const paid = await this.deps.budget.canStartPaidTask(0.4);
     if (!paid.ok) {
@@ -298,218 +294,96 @@ export class ResearchEngine {
       return run;
     }
 
-    const newEvents: ResearchEvent[] = [];
-    const newLeads: ResearchLead[] = [];
-    const newAnalyses: AnalysisRecord[] = [];
-    const notifications: V2Notification[] = [];
+    const ctx: AgentContext = {
+      project,
+      run,
+      disclosures: this.deps.disclosures,
+      tavily: this.deps.tavily,
+      upload: this.deps.upload,
+      fetchImpl: this.deps.fetchImpl || fetch,
+      clock: this.deps.clock || (() => new Date()),
+      newEvents: [],
+      notes: { completed: [], unresolved: [], supported: [], needsRevision: [] },
+    };
 
-    if (project.identityStatus !== "IDENTIFIED" || !project.company) {
-      run.coverage.official = "INCOMPLETE";
-      run.coverage.notes.push("证券身份未唯一确认，不启动自动跟踪");
-    } else if (mode !== "MONITOR_EXTERNAL") {
-      const since = new Date(this.deps.clock?.() || Date.now());
-      since.setMonth(since.getMonth() - 12);
-      const official = await this.deps.disclosures.search(project.company.securityCode, project.company.exchange, since.toISOString().slice(0, 10));
-      run.coverage.official = official.coverage === "COMPLETE" ? "COMPLETE" : official.coverage === "FAILED" ? "FAILED" : "INCOMPLETE";
-      if (official.error) run.coverage.notes.push(official.error);
-      if (official.coverage === "FAILED") {
-        await this.deps.store.recordCheck({
-          projectId: project.id,
-          kind: "OFFICIAL",
-          status: "FAILED",
-          coverage: "FAILED",
-          notes: official.error || "官方披露检查失败",
-          startedAt: run.createdAt,
-          finishedAt: this.clock(),
-        });
-      }
-      for (const item of official.items.slice(0, mode === "DEEP" ? 16 : 8)) {
-        if (run.documentsRead >= run.limits.documents) break;
-        run.documentsRead += 1;
-        const evidence = makeEvidence({
-          projectId: project.id,
-          sourceKind: "OFFICIAL_DISCLOSURE",
-          title: item.title,
-          url: item.officialUrl,
-          documentId: null,
-          quote: `${item.companyName} ${item.title}`,
-          occurredAt: item.publishedAt,
-          disclosedAt: item.publishedAt,
-          discoveredAt: this.clock(),
-          parentOriginKey: null,
-          companyName: item.companyName,
-          securityCode: item.securityCode,
-          page: null,
-          bbox: null,
-          reprintOf: null,
-          quality: "NATIVE",
-          originKey: item.id,
-        });
-        project.evidence.push(evidence);
-        const stage = item.isCorrection ? "CORRECTED" : /意向|拟|计划/.test(item.title) ? "PLANNED" : "ANNOUNCED";
-        const verified = verifyProposition({
-          projectId: project.id,
-          description: item.title,
-          stage,
-          proposition: `${item.companyName} 公告：${item.title}`,
-          companyName: project.company.name,
-          securityCode: project.company.securityCode,
-          occurredAt: item.publishedAt,
-          disclosedAt: item.publishedAt,
-          discoveredAt: this.clock(),
-          evidence: [evidence],
-        });
-        newEvents.push(verified.event);
-        if (item.isCorrection) {
-          const previous = project.events.filter((event) => event.originKey === evidence.originKey || event.description.includes(item.title.replace(/更正|修订/g, "")));
-          for (const prior of previous) {
-            prior.verification = "CORRECTED";
-            verified.event.correctionOf = prior.id;
-            const wasNotified = (await this.deps.store.listNotifications(project.id)).some((note) => note.eventIds.includes(prior.id) && !note.correctionOf);
-            if (wasNotified) {
-              notifications.push({
-                id: crypto.randomUUID(),
-                projectId: project.id,
-                kind: "CORRECTION",
-                title: `公告更正：${item.title}`,
-                body: "此前已通知的事实被更正，相关分析需要按新原文理解。",
-                eventIds: [verified.event.id, prior.id],
-                analysisIds: [],
-                importance: "HIGH",
-                createdAt: this.clock(),
-                readAt: null,
-                reason: "原始公告更正后同步提醒",
-                correctionOf: prior.id,
-              });
-            }
-          }
-        }
-      }
-      project.monitoring.lastOfficialCheckAt = this.clock();
-      if (official.coverage !== "FAILED") project.monitoring.lastOfficialSuccessAt = this.clock();
+    await runScriptedAgent(ctx, mode);
+    if (mode === "DEEP" || mode === "BACKGROUND") {
+      await runModelAgent(ctx, {
+        store: this.deps.store,
+        roles: this.deps.roles,
+        budget: this.deps.budget,
+        clock: this.deps.clock || (() => new Date()),
+      });
     }
 
-    if (mode !== "MONITOR_OFFICIAL") {
-      const query = [project.company?.name, project.currentStance?.summary, "分歧 风险 反证"].filter(Boolean).join(" ");
-      const external = query.trim() ? await this.deps.tavily.search(query) : { hits: [], coverage: "INCOMPLETE" as const, error: "缺少检索词" };
-      run.coverage.external = external.coverage === "NOT_CONFIGURED" ? "INCOMPLETE" : external.coverage;
-      if (external.error) run.coverage.notes.push(external.error);
-      if (external.coverage !== "FAILED" && external.coverage !== "NOT_CONFIGURED") project.monitoring.lastExternalSuccessAt = this.clock();
-      project.monitoring.lastExternalCheckAt = this.clock();
-      for (const hit of external.hits.slice(0, 6)) {
-        if (run.documentsRead >= run.limits.documents) break;
-        run.documentsRead += 1;
-        const evidence = makeEvidence({
-          projectId: project.id,
-          sourceKind: /cninfo|sse.com.cn|szse.cn/.test(hit.url) ? "OFFICIAL_DISCLOSURE" : "EXTERNAL_REPORT",
-          title: hit.title,
-          url: hit.url,
-          documentId: null,
-          quote: hit.content.slice(0, 800),
-          occurredAt: hit.publishedAt,
-          disclosedAt: hit.publishedAt,
-          discoveredAt: this.clock(),
-          parentOriginKey: null,
-          companyName: project.company?.name || null,
-          securityCode: project.company?.securityCode || null,
-          page: null,
-          bbox: null,
-          reprintOf: null,
-          quality: "EXTRACT",
-        });
-        project.evidence.push(evidence);
-        const verified = verifyProposition({
-          projectId: project.id,
-          description: hit.title,
-          stage: "ANNOUNCED",
-          proposition: hit.content.slice(0, 180),
-          companyName: project.company?.name || null,
-          securityCode: project.company?.securityCode || null,
-          occurredAt: hit.publishedAt,
-          disclosedAt: hit.publishedAt,
-          discoveredAt: this.clock(),
-          evidence: [evidence],
-        });
-        if (verified.accepted) newEvents.push(verified.event);
-        else {
-          newLeads.push({
+    if (run.coverage.official === "FAILED") {
+      await this.deps.store.recordCheck({
+        projectId: project.id,
+        kind: "OFFICIAL",
+        status: "FAILED",
+        coverage: "FAILED",
+        notes: run.coverage.notes.join("；") || "官方披露检查失败",
+        startedAt: run.createdAt,
+        finishedAt: this.clock(),
+      });
+    }
+
+    const notifications: V2Notification[] = [];
+    for (const event of ctx.newEvents) {
+      if (event.stage !== "CORRECTED") continue;
+      const previous = project.events.filter((prior) => prior.originKey === event.originKey && prior.id !== event.id);
+      for (const prior of previous) {
+        prior.verification = "CORRECTED";
+        event.correctionOf = prior.id;
+        const wasNotified = (await this.deps.store.listNotifications(project.id)).some((note) => note.eventIds.includes(prior.id) && !note.correctionOf);
+        if (wasNotified) {
+          notifications.push({
             id: crypto.randomUUID(),
             projectId: project.id,
-            text: hit.title,
-            discoveredAt: this.clock(),
-            nextCheckAt: new Date((this.deps.clock?.() || new Date()).getTime() + 3600_000).toISOString(),
-            attempts: 0,
-            status: "OPEN",
-            evidenceIds: [evidence.id],
+            kind: "CORRECTION",
+            title: `公告更正：${event.description}`,
+            body: "此前已通知的事实被更正，相关分析需要按新原文理解。",
+            eventIds: [event.id, prior.id],
+            analysisIds: [],
+            importance: "HIGH",
+            createdAt: this.clock(),
+            readAt: null,
+            reason: "原始公告更正后同步提醒",
+            correctionOf: prior.id,
           });
         }
       }
     }
 
     project.evidence = uniqueOriginEvidence(project.evidence);
-    const merged = mergeSameOriginEvents([...project.events, ...newEvents]);
-    const added = merged.filter((event) => !project.events.some((old) => old.id === event.id || (old.originKey === event.originKey && old.proposition === event.proposition)));
-    project.events = merged;
-    project.leads = [...project.leads, ...newLeads];
+    const applied = applyVerifiedAnalyses(project, run, ctx.newEvents, this.clock());
+    const existingNotes = await this.deps.store.listNotifications(project.id);
+    const freshImportant = applied.notifications.filter((note) => !existingNotes.some((old) => old.eventIds.some((id) => note.eventIds.includes(id)) || old.reason === note.reason));
+    notifications.push(...freshImportant);
+    maybeDailyDigest(project, this.deps.clock?.() || new Date(), notifications);
 
-    for (const event of added) {
-      if (event.verification !== "VERIFIED") continue;
-      const novelty = !project.analyses.some((item) => item.eventIds.includes(event.id) || item.text.includes(event.originKey));
-      const judged = judgeImportance({ event, stance: project.currentStance, novelty });
-      const analysis: AnalysisRecord = {
-        id: crypto.randomUUID(),
-        projectId: project.id,
-        runId: run.id,
-        stanceVersion: project.currentStance?.version || 0,
-        eventIds: [event.id],
-        evidenceIds: event.evidenceIds,
-        text: `${event.attributedSpeaker ? `${event.attributedSpeaker}披露：` : ""}${event.description}。对用户立场的影响：${judged.reason}`,
-        assumptionsUnmet: event.limitations,
-        importance: judged.importance,
-        supportsStance: judged.supports,
-        createdAt: this.clock(),
-      };
-      newAnalyses.push(analysis);
-      if (judged.importance === "HIGH" && novelty && !project.isReplay) {
-        const duplicate = (await this.deps.store.listNotifications(project.id)).some((note) => note.eventIds.includes(event.id) || note.reason === event.originKey);
-        if (!duplicate) {
-          notifications.push({
-            id: crypto.randomUUID(),
-            projectId: project.id,
-            kind: "IMPORTANT_CHANGE",
-            title: event.description.slice(0, 80),
-            body: analysis.text,
-            eventIds: [event.id],
-            analysisIds: [analysis.id],
-            importance: "HIGH",
-            createdAt: this.clock(),
-            readAt: null,
-            reason: event.originKey,
-            correctionOf: null,
-          });
-        }
-      }
-    }
-    project.analyses = [...project.analyses, ...newAnalyses];
-
-    const supported = newAnalyses.filter((item) => item.supportsStance === "SUPPORTS").map((item) => item.text);
-    const challenged = newAnalyses.filter((item) => item.supportsStance === "CHALLENGES").map((item) => item.text);
+    const supported = applied.analyses.filter((item) => item.supportsStance === "SUPPORTS").map((item) => item.text);
+    const challenged = applied.analyses.filter((item) => item.supportsStance === "CHALLENGES").map((item) => item.text);
     if (run.preliminary) {
       run.preliminary = {
         ...run.preliminary,
-        supported: [...run.preliminary.supported, ...supported].slice(0, 8),
-        needsRevision: [...run.preliminary.needsRevision, ...challenged].slice(0, 8),
+        supported: [...run.preliminary.supported, ...supported, ...ctx.notes.supported].slice(0, 8),
+        needsRevision: [...run.preliminary.needsRevision, ...challenged, ...ctx.notes.needsRevision].slice(0, 8),
+        unverified: [...run.preliminary.unverified, ...project.leads.filter((item) => item.status === "OPEN").map((item) => item.text)].slice(0, 8),
+        openQuestions: [...new Set([...run.preliminary.openQuestions, ...ctx.notes.unresolved])].slice(0, 8),
       };
     }
+
     const hitLimit = run.modelCalls >= run.limits.modelCalls || run.documentsRead >= run.limits.documents;
     run.status = hitLimit || run.coverage.official === "FAILED" ? "PARTIAL" : "COMPLETED";
     if (hitLimit) run.coverage.notes.push("已达本轮调用或资料上限，未完成部分保留为未决问题，不标成研究完成");
     run.completedAt = this.clock();
-    run.resultSummary = added.length
-      ? `本轮新增 ${added.length} 条事件，其中已核实 ${added.filter((item) => item.verification === "VERIFIED").length} 条。`
+    const verifiedCount = ctx.newEvents.filter((item) => item.verification === "VERIFIED").length;
+    run.resultSummary = ctx.newEvents.length
+      ? `本轮新增 ${ctx.newEvents.length} 条事件，其中已核实 ${verifiedCount} 条。`
       : "本轮未发现新的已核实事件。";
     run.events.push({ seq: run.events.length + 1, at: this.clock(), phase: "complete", message: run.resultSummary });
-    await this.deps.store.commitResearchUpdate({ project, run, events: added, analyses: newAnalyses, notifications });
+    await this.deps.store.commitResearchUpdate({ project, run, events: ctx.newEvents, analyses: applied.analyses, notifications });
     return run;
   }
 

@@ -147,12 +147,19 @@ export async function createApp(options: { analyze?: typeof runContinuousAnalysi
   }));
   app.use("/v1", createV1Router({ uploadService, modelTransport: options.modelTransport }));
   const v2Options: V2RouterOptions = { ...(options.v2 || {}), uploadService, modelTransport: options.v2?.modelTransport ?? options.modelTransport };
-  app.use("/v2", createV2Router(v2Options));
+  const v2Runtime = createV2Runtime(v2Options);
+  app.use("/v2", createV2Router({
+    ...v2Options,
+    store: v2Runtime.store,
+    queue: v2Runtime.queue,
+    roles: v2Runtime.roles,
+    disclosures: v2Runtime.disclosures,
+    tavily: v2Runtime.tavily,
+  }));
   if (!options.disableV2Worker && !process.env.NODE_TEST_CONTEXT) {
-    const runtime = createV2Runtime(v2Options);
-    const worker = new V2Worker(runtime.queue, runtime.engine, runtime.store);
+    const worker = new V2Worker(v2Runtime.queue, v2Runtime.engine, v2Runtime.store);
     worker.start(800);
-    const monitor = new MonitorScheduler(runtime.store, runtime.queue);
+    const monitor = new MonitorScheduler(v2Runtime.store, v2Runtime.queue);
     setInterval(() => {
       monitor.scheduleDueProjects().catch((error) => console.error("[v2-monitor]", error));
     }, 30_000);

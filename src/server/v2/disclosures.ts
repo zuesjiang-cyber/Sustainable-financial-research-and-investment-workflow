@@ -15,6 +15,16 @@ const CATEGORIES = [
   "category_sjdbg_szsh",
   "category_zsgg_szsh",
   "category_qyfpxzcs_szsh",
+  "category_dshgg_szsh",
+  "category_jshgg_szsh",
+  "category_gddh_szsh",
+  "category_rcjy_szsh",
+  "category_zf_szsh",
+  "category_gqjl_szsh",
+  "category_kzzq_szsh",
+  "category_pg_szsh",
+  "category_zj_szsh",
+  "category_ssgszd_szsh",
 ].join(";");
 
 function classifyTitle(title: string): OfficialDisclosureItem["reportType"] {
@@ -28,7 +38,7 @@ function classifyTitle(title: string): OfficialDisclosureItem["reportType"] {
 export class CninfoDisclosureClient {
   constructor(private readonly fetchImpl: typeof fetch = fetch) {}
 
-  async search(securityCode: string, exchange: "SSE" | "SZSE", since?: string): Promise<DisclosureSearchResult> {
+  async search(securityCode: string, exchange: "SSE" | "SZSE", since?: string, searchkey?: string): Promise<DisclosureSearchResult> {
     const checkedAt = new Date().toISOString();
     try {
       const controller = new AbortController();
@@ -40,9 +50,9 @@ export class CninfoDisclosureClient {
         tabName: "fulltext",
         plate: "",
         stock: securityCode,
-        searchkey: "",
+        searchkey: searchkey || "",
         secid: "",
-        category: CATEGORIES,
+        category: searchkey ? "" : CATEGORIES,
         trade: "",
         seDate: since ? `${since.slice(0, 10)}~` : "",
         sortName: "time",

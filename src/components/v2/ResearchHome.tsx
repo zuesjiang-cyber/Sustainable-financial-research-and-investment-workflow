@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Bell, Building2, Loader2, Radio, Search, Sparkles, Upload } from "lucide-react";
+import { Bell, Building2, FileText, Loader2, Radio, Search, Sparkles, Upload } from "lucide-react";
+import { uploadResearchReport } from "../research/uploadClient";
 import { v2 } from "./api";
 
 export const ResearchHome: React.FC<{
@@ -11,6 +12,8 @@ export const ResearchHome: React.FC<{
 }> = ({ projects, notifications, onOpenProject, onCreated, onRefresh }) => {
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
+  const [documentId, setDocumentId] = useState<string | null>(null);
+  const [pdfName, setPdfName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const unread = notifications.filter((item) => !item.readAt).length;
@@ -20,8 +23,8 @@ export const ResearchHome: React.FC<{
   );
 
   const submit = async () => {
-    if (!text.trim() && !url.trim()) {
-      setError("请输入判断、粘贴材料，或提供网页链接");
+    if (!text.trim() && !url.trim() && !documentId) {
+      setError("请输入判断、粘贴材料、提供网页链接，或上传 PDF");
       return;
     }
     setBusy(true);
@@ -30,10 +33,12 @@ export const ResearchHome: React.FC<{
       const result = await v2<any>("/v2/research", {
         method: "POST",
         headers: { "Idempotency-Key": `ui-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` },
-        body: JSON.stringify({ text: text.trim(), url: url.trim() || undefined }),
+        body: JSON.stringify({ text: text.trim(), url: url.trim() || undefined, documentId: documentId || undefined }),
       });
       setText("");
       setUrl("");
+      setDocumentId(null);
+      setPdfName(null);
       onCreated(result.projectId, result.runId);
       onRefresh();
     } catch (err) {
@@ -61,14 +66,40 @@ export const ResearchHome: React.FC<{
         />
         <div className="v2-composer-row">
           <input className="ft-input" placeholder="可选：网页链接" value={url} onChange={(event) => setUrl(event.target.value)} />
+          <label className="ft-btn-soft v2-file-label">
+            <Upload className="h-4 w-4" />
+            {pdfName ? pdfName : "上传 PDF"}
+            <input
+              type="file"
+              accept="application/pdf"
+              hidden
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                setBusy(true);
+                setError(null);
+                try {
+                  const receipt = await uploadResearchReport(file, { role: "THESIS_SOURCE" });
+                  setDocumentId(receipt.uploadId);
+                  setPdfName(file.name);
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "PDF 上传失败");
+                } finally {
+                  setBusy(false);
+                  event.target.value = "";
+                }
+              }}
+            />
+          </label>
           <button type="button" className="ft-btn-primary" onClick={submit} disabled={busy}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             开始研究
           </button>
         </div>
+        {documentId && <p className="v2-composer-hint"><FileText className="h-3.5 w-3.5" /> 已解析 PDF，将作为用户材料进入研究，不会自动改写立场。</p>}
         {error && <div className="inline-alert is-error">{error}</div>}
         <div className="v2-composer-hint">
-          <Upload className="h-3.5 w-3.5" /> 转发研报不会自动变成你的立场 · 模糊观点可以保留，不必先建完整框架
+          <Upload className="h-3.5 w-3.5" /> 文字 / 链接 / PDF · 转发研报不会自动变成你的立场 · 模糊观点可以保留
         </div>
       </section>
 

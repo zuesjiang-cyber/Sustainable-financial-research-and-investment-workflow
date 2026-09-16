@@ -210,6 +210,7 @@ export interface V2Monitoring {
   lastExternalCheckAt: string | null;
   lastOfficialSuccessAt: string | null;
   lastExternalSuccessAt: string | null;
+  lastDigestAt: string | null;
 }
 
 export interface V2Project {
@@ -284,6 +285,7 @@ export const DEFAULT_MONITORING: V2Monitoring = {
   lastExternalCheckAt: null,
   lastOfficialSuccessAt: null,
   lastExternalSuccessAt: null,
+  lastDigestAt: null,
 };
 
 export const DEFAULT_MONTHLY_BUDGET_CNY = 80;

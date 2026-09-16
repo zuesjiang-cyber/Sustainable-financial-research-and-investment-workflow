@@ -29,6 +29,7 @@ export const EvidenceSidebar: React.FC<{
               <div><dt>页码 / 坐标</dt><dd>{item.page || "—"} {item.bbox ? JSON.stringify(item.bbox) : ""}</dd></div>
               <div><dt>转载合并</dt><dd>{item.reprintOf || item.originKey}</dd></div>
             </dl>
+            {item.documentId && <p className="v2-empty">已绑定 PDF 文档 {item.documentId}，页码与坐标来自解析器，不是模型估算。</p>}
             {item.url && (
               <a className="ft-btn-soft" href={item.url} target="_blank" rel="noreferrer">
                 <Link2 className="h-3.5 w-3.5" /> 打开原始网页

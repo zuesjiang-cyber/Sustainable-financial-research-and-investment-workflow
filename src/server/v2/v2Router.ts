@@ -52,7 +52,7 @@ export function createV2Runtime(options: V2RouterOptions = {}) {
     budget,
   });
   const replay = new ReplayService(store);
-  return { store, queue, engine, replay, budget, roles };
+  return { store, queue, engine, replay, budget, roles, disclosures, tavily };
 }
 
 export function createV2Router(options: V2RouterOptions = {}): Router {

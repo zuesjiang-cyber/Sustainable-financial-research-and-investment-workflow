@@ -30,6 +30,7 @@ export const SettingsPage: React.FC = () => {
       <section className="ft-card v2-panel">
         <h2><Wallet className="h-4 w-4" /> 预算用量</h2>
         <p>已用 {settings?.spentCny ?? 0} / {settings?.monthlyBudgetCny ?? 80} 元，预留 {settings?.reservedCny ?? 0} 元。</p>
+        <p>模型对照预算单独记账：已用 {settings?.comparisonSpentCny ?? 0} / {settings?.comparisonBudgetCny ?? 60} 元，不占用日常研究额度。</p>
         <div className="v2-composer-row">
           <input className="ft-input" value={budget} onChange={(event) => setBudget(event.target.value)} />
           <button type="button" className="ft-btn-primary" onClick={async () => { await v2("/v2/settings", { method: "PATCH", body: JSON.stringify({ monthlyBudgetCny: Number(budget) }) }); load(); }}>调整月度上限</button>

@@ -81,8 +81,11 @@ export const CompanyResearchPage: React.FC<{
             <div><strong>正在核实</strong>{latestRun.preliminary.openQuestions.map((item: string) => <p key={item}>{item}</p>)}</div>
           </div>
           {latestRun.coverage && (
-            <p className="v2-coverage">官方披露 {latestRun.coverage.official} · 外部 {latestRun.coverage.external}{latestRun.coverage.notes?.[0] ? ` · ${latestRun.coverage.notes[0]}` : ""}</p>
+            <p className="v2-coverage">官方披露 {latestRun.coverage.official} · 外部 {latestRun.coverage.external} · 模型 {latestRun.modelCalls}/{latestRun.limits?.modelCalls} · 资料 {latestRun.documentsRead}/{latestRun.limits?.documents}{latestRun.coverage.notes?.[0] ? ` · ${latestRun.coverage.notes[0]}` : ""}</p>
           )}
+          {latestRun.events?.filter((item: any) => item.phase === "tool").slice(-6).map((item: any) => (
+            <p key={item.seq} className="v2-tool-line">工具 · {item.message}</p>
+          ))}
         </section>
       )}
 
@@ -120,9 +123,9 @@ export const CompanyResearchPage: React.FC<{
           <h2>未解决风险 / 线索</h2>
           {project.leads?.filter((item: any) => item.status === "OPEN").length
             ? project.leads.filter((item: any) => item.status === "OPEN").map((lead: any) => (
-              <p key={lead.id}>{lead.text}</p>
+              <p key={lead.id}>{lead.text}<em> · 下次 {lead.nextCheckAt?.slice(0, 16)?.replace("T", " ")} · 第 {lead.attempts + 1} 次</em></p>
             ))
-            : <p className="v2-empty">暂无未核实线索。</p>}
+            : <p className="v2-empty">暂无未核实线索。线索按 1/6/24 小时再查，不会因为“提早提醒”变成事实。</p>}
         </article>
         <article className="ft-card v2-panel">
           <h2>外部主要看法</h2>
@@ -150,7 +153,7 @@ export const CompanyResearchPage: React.FC<{
 
       <section className="ft-card v2-panel">
         <h2><Search className="h-4 w-4" /> 深入研究</h2>
-        <p>默认围绕当前最重要的缺口。估值只在具备价格日期、财务口径和必要假设后进行。</p>
+        <p>默认围绕当前最重要的缺口。达到 12 次模型 / 24 份资料后交付部分结果与未决问题，不标成完成。估值只在具备价格日期、财务口径和必要假设后进行。</p>
         <div className="v2-composer-row">
           <input className="ft-input" value={deepQuestion} placeholder={gapQuestion} onChange={(event) => setDeepQuestion(event.target.value)} />
           <button type="button" className="ft-btn-primary" onClick={startDeep} disabled={busy}>
